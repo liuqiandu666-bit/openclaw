@@ -31,6 +31,86 @@ DB_PATH     = "/home/liuqi/.openclaw/workspace/data/astock.db"
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
+
+# ══════════════════════════════════════════════════════════════
+# 评分与 B 类战略特例标记
+# ══════════════════════════════════════════════════════════════
+
+# 国家战略行业（取证监会行业代码前3位）
+_STRATEGIC_INDUSTRIES = {
+    "C39": "AI算力/半导体",
+    "I65": "数字经济/AI软件",
+    "D44": "新能源/储能",
+    "C38": "新能源设备/电气",
+    "C27": "生物医药",
+    "C35": "高端制造/机器人",
+    "C34": "高端制造/通用设备",
+    "C36": "新能源汽车",
+    "C37": "铁路船舶/军工装备",
+    "W84": "军工/国防",
+}
+
+
+def _compute_score(metrics: dict) -> int:
+    """复合评分（0-100），衡量各指标超越阈值的幅度及估值合理性。"""
+    score = 0
+
+    # 合同负债同比（0-35分）：超越幅度越大越好
+    cl = metrics.get("contract_liability_yoy")
+    if cl is not None:
+        if cl >= 500:   score += 35
+        elif cl >= 200: score += 30
+        elif cl >= 100: score += 24
+        elif cl >= 45:  score += 16
+
+    # OCF/净利润（0-28分）：含金量核心指标
+    ocf = metrics.get("ocf_ni_ratio")
+    if ocf is not None and ocf > 0:
+        if ocf >= 2.0:  score += 28
+        elif ocf >= 1.5: score += 23
+        elif ocf >= 1.0: score += 17
+        elif ocf >= 0.8: score += 11
+
+    # 毛利率连续改善（0-20分）：改善幅度
+    if metrics.get("gross_margin_improving"):
+        gm0 = metrics.get("gross_margin_q0") or 0
+        gm2 = metrics.get("gross_margin_q2") or 0
+        improvement = gm0 - gm2
+        if improvement >= 5:    score += 20
+        elif improvement >= 2:  score += 15
+        else:                   score += 10
+
+    # CAPEX同比（0-12分）：扩张力度
+    capex = metrics.get("capex_yoy")
+    if capex is not None:
+        if capex >= 200:   score += 12
+        elif capex >= 100: score += 9
+        elif capex >= 30:  score += 6
+
+    # PE估值调整（-10 to +5）
+    pe = metrics.get("pe_ttm")
+    if pe is not None:
+        if pe < 0:          score -= 10
+        elif pe > 100:      score -= 8
+        elif pe > 60:       score -= 3
+        elif 15 <= pe <= 40: score += 5
+        elif pe <= 15:      score += 3  # 可能低估，但也需谨慎
+
+    return max(0, min(100, score))
+
+
+def _check_b_class(metrics: dict, industry_name: str | None) -> str | None:
+    """检测 B 类战略特例：核心指标远超阈值 + 国家战略方向行业。"""
+    cl  = metrics.get("contract_liability_yoy") or 0
+    ocf = metrics.get("ocf_ni_ratio") or 0
+    far_above = cl > 80 or ocf > 1.5
+
+    if not far_above:
+        return None
+
+    ind = (industry_name or "")[:3]
+    return _STRATEGIC_INDUSTRIES.get(ind)
+
 def fatal(msg):
     print(f"[FATAL] {msg}", flush=True)
     sys.exit(1)
@@ -192,10 +272,14 @@ def screen_from_db():
                 metrics["pe_warning"] = f"估值偏高（PE={pe:.0f}）"
 
         if len(passed) >= 3:
+            score = _compute_score(metrics)
+            b_class = _check_b_class(metrics, r["industry_name"])
             results.append({
                 "code": code, "name": name,
                 "industry": r["industry_name"],
                 "passed_count": len(passed),
+                "composite_score": score,
+                "b_class": b_class,
                 "passed": passed, "failed": failed,
                 "metrics": metrics,
             })
@@ -346,6 +430,44 @@ def screen_from_api():
 # 主入口
 # ══════════════════════════════════════════════════════════════
 
+def _pick_top_candidates(sorted_results: list, industry_cap: int = 5, total_cap: int = 40) -> list:
+    """从排序后的结果中挑选行业分散的优质候选（B类优先，共享 total_cap）。"""
+    from collections import defaultdict
+    industry_count: dict = defaultdict(int)
+    selected = []
+    seen_codes: set = set()
+
+    # 第一轮：优先放入 B 类特例（行业上限照常，但 B 类占总名额）
+    for r in sorted_results:
+        if len(selected) >= total_cap:
+            break
+        if not r.get("b_class"):
+            continue
+        code = r["code"]
+        if code in seen_codes:
+            continue
+        ind = r.get("industry") or "未知"
+        if industry_count[ind] < industry_cap:
+            selected.append(r)
+            seen_codes.add(code)
+            industry_count[ind] += 1
+
+    # 第二轮：剩余名额填入 A 类（评分最高的）
+    for r in sorted_results:
+        if len(selected) >= total_cap:
+            break
+        code = r["code"]
+        if code in seen_codes:
+            continue
+        ind = r.get("industry") or "未知"
+        if industry_count[ind] < industry_cap:
+            selected.append(r)
+            seen_codes.add(code)
+            industry_count[ind] += 1
+
+    return selected
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--api",      action="store_true", help="强制使用实时 API")
@@ -368,17 +490,29 @@ if __name__ == "__main__":
         results, checked, total = screen_from_api()
         source = "akshare_api"
 
+    # 按复合评分排序
+    sorted_results = sorted(
+        results,
+        key=lambda x: (x["passed_count"], x.get("composite_score", 0)),
+        reverse=True,
+    )
+
+    # top_candidates：行业分散，每行业最多 5 只，总数上限 40
+    top_candidates = _pick_top_candidates(sorted_results, industry_cap=5, total_cap=40)
+
     # 输出 JSON
     output = {
         "date":   TODAY,
         "status": "success",
         "source": source,
         "summary": {
-            "total_market":  total,
-            "batch_checked": checked,
-            "qualified":     len(results),
+            "total_market":    total,
+            "batch_checked":   checked,
+            "qualified":       len(results),
+            "top_candidates":  len(top_candidates),
         },
-        "results": sorted(results, key=lambda x: x["passed_count"], reverse=True),
+        "top_candidates": top_candidates,
+        "results": sorted_results,
     }
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
