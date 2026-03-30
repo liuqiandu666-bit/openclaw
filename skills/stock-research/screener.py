@@ -82,7 +82,7 @@ def screen_from_db():
         GROUP BY code
     ),
     latest_cf AS (
-        SELECT code, report_date, netcash_operate, construct_asset, netprofit_cf,
+        SELECT code, report_date, netcash_operate, construct_asset,
                ROW_NUMBER() OVER (PARTITION BY code ORDER BY report_date DESC) AS rn
         FROM cash_flow
     ),
@@ -90,8 +90,7 @@ def screen_from_db():
         SELECT code,
                MAX(CASE WHEN rn=1 THEN netcash_operate  END) AS ocf_latest,
                MAX(CASE WHEN rn=1 THEN construct_asset  END) AS capex_latest,
-               MAX(CASE WHEN rn=5 THEN construct_asset  END) AS capex_prev,
-               MAX(CASE WHEN rn=1 THEN netprofit_cf     END) AS ni_latest
+               MAX(CASE WHEN rn=5 THEN construct_asset  END) AS capex_prev
         FROM latest_cf
         WHERE rn <= 5
         GROUP BY code
@@ -100,7 +99,8 @@ def screen_from_db():
         s.code, s.name,
         bs.cl_latest, bs.cl_prev_year,
         inc.gm0, inc.gm1, inc.gm2, inc.netprofit,
-        cf.ocf_latest, cf.capex_latest, cf.capex_prev, cf.ni_latest,
+        cf.ocf_latest, cf.capex_latest, cf.capex_prev,
+        inc.netprofit AS ni_latest,
         m.price, m.pe_ttm, m.pb, m.snap_date,
         ind.industry_name
     FROM stocks s
@@ -152,13 +152,18 @@ def screen_from_db():
         else:
             failed.append("毛利率连续改善 无数据")
 
-        # OCF / 净利润
+        # OCF / 净利润（用 income_stmt.netprofit，季报也有数据）
         ocf = r["ocf_latest"]
         ni  = r["ni_latest"]
-        if ocf is not None and ni and ni != 0:
-            ratio = round(ocf / ni, 2)
-            metrics["ocf_ni_ratio"] = ratio
-            (passed if ratio >= 0.8 else failed).append(f"OCF/净利润 {ratio}")
+        if ocf is not None and ni is not None and ni != 0:
+            if ni < 0:
+                # 亏损股：OCF/NI 无意义，直接失败
+                metrics["ocf_ni_ratio"] = None
+                failed.append(f"OCF/净利润 亏损股跳过(净利润={round(ni/1e8,1)}亿)")
+            else:
+                ratio = round(ocf / ni, 2)
+                metrics["ocf_ni_ratio"] = ratio
+                (passed if ratio >= 0.8 else failed).append(f"OCF/净利润 {ratio}")
         else:
             failed.append("OCF/净利润 无数据")
 
@@ -173,11 +178,18 @@ def screen_from_db():
             failed.append("CAPEX同比 无数据")
 
         # 市场数据（来自 market_snapshot + industry）
+        pe = r["pe_ttm"]
         metrics["price"]         = r["price"]
-        metrics["pe_ttm"]        = r["pe_ttm"]
+        metrics["pe_ttm"]        = pe
         metrics["pb"]            = r["pb"]
         metrics["snap_date"]     = r["snap_date"]
         metrics["industry_name"] = r["industry_name"]
+        # PE 异常标注
+        if pe is not None:
+            if pe < 0:
+                metrics["pe_warning"] = "亏损（PE<0）"
+            elif pe > 100:
+                metrics["pe_warning"] = f"估值偏高（PE={pe:.0f}）"
 
         if len(passed) >= 3:
             results.append({
