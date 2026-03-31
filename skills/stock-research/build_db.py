@@ -135,6 +135,22 @@ CREATE TABLE IF NOT EXISTS fetch_log (
     PRIMARY KEY (code, table_name)
 );
 CREATE INDEX IF NOT EXISTS idx_log_status ON fetch_log (status);
+CREATE TABLE IF NOT EXISTS executive_hold (
+    code           TEXT,
+    announce_date  TEXT,   -- 公告日期
+    cutoff_date    TEXT,   -- 截止日期（实际变动日）
+    person_name    TEXT,   -- 高管姓名
+    person_role    TEXT,   -- 董监高职务
+    change_type    TEXT,   -- 增持 / 减持
+    shares_changed REAL,   -- 变动股数（正=增持，负=减持）
+    shares_after   REAL,   -- 期末持股数（万股）
+    avg_price      REAL,   -- 成交均价（元）
+    change_reason  TEXT,   -- 持股变动原因（竞价交易/股权激励等）
+    fetched_at     TEXT,
+    PRIMARY KEY (code, cutoff_date, person_name, change_type)
+);
+CREATE INDEX IF NOT EXISTS idx_exec_hold_code ON executive_hold (code);
+CREATE INDEX IF NOT EXISTS idx_exec_hold_date ON executive_hold (cutoff_date);
 """
 
 def get_db():
@@ -171,6 +187,23 @@ MIGRATIONS = [
     # cash_flow 新增列
     "ALTER TABLE cash_flow ADD COLUMN netcash_invest REAL",
     "ALTER TABLE cash_flow ADD COLUMN netcash_finance REAL",
+    # executive_hold 表（新增，CREATE IF NOT EXISTS 已处理，migration 仅兼容旧库）
+    """CREATE TABLE IF NOT EXISTS executive_hold (
+        code           TEXT,
+        announce_date  TEXT,
+        cutoff_date    TEXT,
+        person_name    TEXT,
+        person_role    TEXT,
+        change_type    TEXT,
+        shares_changed REAL,
+        shares_after   REAL,
+        avg_price      REAL,
+        change_reason  TEXT,
+        fetched_at     TEXT,
+        PRIMARY KEY (code, cutoff_date, person_name, change_type)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_exec_hold_code ON executive_hold (code)",
+    "CREATE INDEX IF NOT EXISTS idx_exec_hold_date ON executive_hold (cutoff_date)",
 ]
 
 def init_db():
@@ -689,6 +722,9 @@ def show_status():
     mkt     = conn.execute("SELECT COUNT(*) FROM market_snapshot").fetchone()[0]
     mkt_dt  = conn.execute("SELECT MAX(snap_date) FROM market_snapshot").fetchone()[0]
     ind     = conn.execute("SELECT COUNT(*) FROM industry").fetchone()[0]
+    exec_hold = conn.execute("SELECT COUNT(*) FROM executive_hold").fetchone()[0]
+    exec_dt   = conn.execute("SELECT MAX(cutoff_date) FROM executive_hold").fetchone()[0]
+    exec_codes = conn.execute("SELECT COUNT(DISTINCT code) FROM executive_hold").fetchone()[0]
     log_s   = conn.execute(
         "SELECT status, COUNT(*) FROM fetch_log GROUP BY status"
     ).fetchall()
@@ -704,11 +740,88 @@ def show_status():
     print(f"财务报表  资产负债表：{bs} 只  利润表：{inc} 只  现金流：{cf} 只  覆盖率：{bs/max(total,1)*100:.1f}%")
     print(f"市场快照  {mkt} 只（最新日期：{mkt_dt or '未抓取'}）")
     print(f"行业分类  {ind} 只（{'已完成' if ind > 1000 else '未抓取或不完整'}）")
+    print(f"高管增减持 {exec_hold} 条记录  涉及 {exec_codes} 只股票（最新截止日：{exec_dt or '未抓取'}）")
     print(f"\n财务报表抓取状态：")
     for s, n in log_s:
         print(f"  {s:10s}: {n}")
     print(f"\n最后更新：{latest}")
     print("="*45)
+
+def fetch_executive_hold(conn):
+    """
+    从巨潮资讯拉取全市场高管增减持数据（两次 API 调用，约 10-30 秒）。
+    覆盖近 1-2 年的所有增持/减持记录，按 code 索引供深度分析查询。
+    建议每季度或财报季后更新一次：python3 build_db.py --executive-hold
+    """
+    now = datetime.now().isoformat()
+    rows = []
+    total_inserted = 0
+
+    for change_type in ("增持", "减持"):
+        try:
+            log(f"  拉取高管{change_type}数据（巨潮资讯）...")
+            df = ak.stock_hold_management_detail_cninfo(symbol=change_type)
+            if df is None or df.empty:
+                log(f"  {change_type}：返回空数据，跳过")
+                continue
+        except Exception as e:
+            log(f"  {change_type}：拉取失败 {e}")
+            continue
+
+        log(f"  {change_type}：共 {len(df)} 条记录，写入数据库...")
+
+        for _, r in df.iterrows():
+            code = str(r.get("证券代码", "")).strip().zfill(6)
+            if not code or len(code) != 6:
+                continue
+
+            cutoff  = str(r.get("截止日期", "") or "")[:10]
+            announce = str(r.get("公告日期", "") or "")[:10]
+            if not cutoff:
+                continue
+
+            name   = str(r.get("高管姓名", "") or r.get("董监高姓名", "") or "").strip()
+            role   = str(r.get("董监高职务", "") or "").strip()
+            reason = str(r.get("持股变动原因", "") or "").strip()
+
+            raw_changed = r.get("变动数量")
+            try:
+                shares_changed = float(raw_changed) if raw_changed is not None else None
+                # 减持数量原始值可能已是负数，确保符号正确
+                if shares_changed is not None and change_type == "减持":
+                    shares_changed = -abs(shares_changed)
+                elif shares_changed is not None:
+                    shares_changed = abs(shares_changed)
+            except (TypeError, ValueError):
+                shares_changed = None
+
+            shares_after = _safe_float(r.get("期末持股数量"))
+            avg_price    = _safe_float(r.get("成交均价"))
+
+            rows.append((code, announce, cutoff, name, role,
+                         change_type, shares_changed, shares_after,
+                         avg_price, reason, now))
+
+        # 批量写入
+        if rows:
+            conn.executemany(
+                """INSERT OR REPLACE INTO executive_hold
+                   (code,announce_date,cutoff_date,person_name,person_role,
+                    change_type,shares_changed,shares_after,avg_price,
+                    change_reason,fetched_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                rows
+            )
+            conn.commit()
+            total_inserted += len(rows)
+            rows.clear()
+
+        time.sleep(2)  # 两次调用之间稍作等待
+
+    total = conn.execute("SELECT COUNT(*) FROM executive_hold").fetchone()[0]
+    log(f"高管增减持数据写入完成：本次 {total_inserted} 条，累计 {total} 条")
+    return total
+
 
 def fetch_market_snapshot_baostock(conn):
     """用 baostock 批量更新市场快照（PE/PB/收盘价），稳定不限速。"""
@@ -802,9 +915,10 @@ if __name__ == "__main__":
     parser.add_argument("--market",    action="store_true", help="刷新市场快照（akshare，东方财富）")
     parser.add_argument("--market-bs", action="store_true", help="刷新市场快照（baostock，稳定）", dest="market_bs")
     parser.add_argument("--industry",  action="store_true", help="刷新行业分类")
-    parser.add_argument("--workers",   type=int, default=DEFAULT_WORKERS)
-    parser.add_argument("--limit",     type=int, default=None, help="行业/市值：本批最多处理N只（分批续跑）")
-    parser.add_argument("--interval",  type=float, default=2.0, help="行业/市值：请求间隔秒数（默认2.0）")
+    parser.add_argument("--workers",        type=int, default=DEFAULT_WORKERS)
+    parser.add_argument("--limit",          type=int, default=None, help="行业/市值：本批最多处理N只（分批续跑）")
+    parser.add_argument("--interval",       type=float, default=2.0, help="行业/市值：请求间隔秒数（默认2.0）")
+    parser.add_argument("--executive-hold", action="store_true", help="刷新高管增减持数据（巨潮资讯，约30秒）", dest="executive_hold")
     args = parser.parse_args()
 
     if args.status:
@@ -823,6 +937,11 @@ if __name__ == "__main__":
         init_db()
         conn = get_db()
         fetch_industry_data(conn, limit=args.limit, interval=args.interval)
+        conn.close()
+    elif args.executive_hold:
+        init_db()
+        conn = get_db()
+        fetch_executive_hold(conn)
         conn.close()
     elif args.refresh:
         refresh_financials(n_workers=args.workers)

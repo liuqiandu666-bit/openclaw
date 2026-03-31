@@ -42,23 +42,47 @@ if files:
 python3 -c "from datetime import date; print(date.today())"
 ```
 
-### 第二步：查询本地财务数据
+### 第二步：查询本地财务数据 + 高管增减持
 
 ```python
 import sqlite3
+from datetime import date, timedelta
 DB = "/home/liuqi/.openclaw/workspace/data/astock.db"
 conn = sqlite3.connect(DB)
 code = "000001"  # 6位数字，不含sh/sz前缀
 
-inc  = conn.execute("SELECT report_date, operate_income, operate_cost, gross_margin, netprofit FROM income_stmt WHERE code=? ORDER BY report_date DESC LIMIT 8", (code,)).fetchall()
+inc  = conn.execute("""
+    SELECT report_date, operate_income, operate_cost, gross_margin,
+           COALESCE(parent_netprofit, netprofit) AS ni
+    FROM income_stmt WHERE code=? ORDER BY report_date DESC LIMIT 8
+""", (code,)).fetchall()
 bs   = conn.execute("SELECT report_date, contract_liab, advance_recv, total_assets, total_liab, total_equity FROM balance_sheet WHERE code=? ORDER BY report_date DESC LIMIT 8", (code,)).fetchall()
 cf   = conn.execute("SELECT report_date, netcash_operate, construct_asset FROM cash_flow WHERE code=? ORDER BY report_date DESC LIMIT 8", (code,)).fetchall()
 snap = conn.execute("SELECT m.price, m.pe_ttm, m.pb, m.snap_date, i.industry_name FROM market_snapshot m LEFT JOIN industry i ON m.code=i.code WHERE m.code=?", (code,)).fetchone()
+
+# 高管增减持（近180天）
+cutoff_180d = (date.today() - timedelta(days=180)).isoformat()
+exec_hold = conn.execute("""
+    SELECT cutoff_date, person_name, person_role, change_type,
+           shares_changed, avg_price, change_reason
+    FROM executive_hold
+    WHERE code=? AND cutoff_date >= ?
+    ORDER BY cutoff_date DESC
+""", (code, cutoff_180d)).fetchall()
+
+# 计算净增减持（正=净增持，负=净减持）
+net_hold = sum(r[4] or 0 for r in exec_hold)
+buy_count  = sum(1 for r in exec_hold if r[3] == "增持")
+sell_count = sum(1 for r in exec_hold if r[3] == "减持")
+print(f"高管增减持（近180天）：增持{buy_count}次 减持{sell_count}次 净变动={net_hold:+.0f}股")
+for r in exec_hold:
+    print(f"  {r[0]} {r[1]}({r[2]}) {r[3]} {r[4]:+.0f}股 均价={r[5]} 原因={r[6]}")
 
 for r in inc:  print("INC:", r)
 for r in bs:   print("BS :", r)
 for r in cf:   print("CF :", r)
 print("MKT:", snap)
+conn.close()
 ```
 
 ### 第三步：搜索近期公告和新闻
@@ -69,7 +93,7 @@ web_search: "{公司名称} 业绩 利润 增长 最新"
 web_search: "{行业名称} 政策 2025 OR 2026"
 ```
 
-> 重点关注：增减持公告、大额合同、监管处罚、实控人变动、行业政策。
+> 重点关注：大额合同、监管处罚、实控人变动、行业政策。高管增减持已有本地数据，web_search 仅作补充验证。
 
 ---
 
@@ -169,17 +193,25 @@ web_search: "{行业名称} 政策 2025 OR 2026"
 
 ### 五、综合投资价值评分（满分10分）
 
-| 维度         | 权重 | 得分       | 说明                                        |
-| ------------ | ---- | ---------- | ------------------------------------------- |
-| 成长性       | 25%  | x/10       | 营收/利润增速预期，合同负债增速作为领先指标 |
-| 盈利质量     | 25%  | x/10       | OCF/NI含金量、毛利率趋势                    |
-| 估值安全边际 | 20%  | x/10       | 当前PE/PB vs 行业历史分位                   |
-| 行业赛道     | 15%  | x/10       | 政策支持度、竞争格局、壁垒                  |
-| 股东行为     | 10%  | x/10       | 大股东增持/回购=正面；减持/增发=负面        |
-| 催化剂确定性 | 5%   | x/10       | 近期触发买入的事件可见度                    |
-| **综合得分** | 100% | **x.x/10** |                                             |
+**评分规则：每个维度必须在表格中写出具体依据，不得只填数字。**
 
-> 股东行为评分依据：大股东增持或公司回购 → 8-10分；无明显动作 → 5分；大股东减持 > 1% → 2-3分；实控人减持 > 3% → 1分
+| 维度         | 权重 | 得分       | 具体依据（必填，不得为空）                                    |
+| ------------ | ---- | ---------- | ------------------------------------------------------------- |
+| 成长性       | 25%  | x/10       | 例："归母净利润近3年CAGR=xx%；合同负债同比+xx%（领先指标）"   |
+| 盈利质量     | 25%  | x/10       | 例："OCF/NI=x.xx（现金含金量高）；毛利率连续3季改善+x.x ppt"  |
+| 估值安全边际 | 20%  | x/10       | 例："PE=xx，行业均值=xx，处于历史xx%分位；PB=x.x"             |
+| 行业赛道     | 15%  | x/10       | 例："国家战略方向AI算力，政策持续加码；竞争格局较集中"        |
+| 高管行为     | 10%  | x/10       | 例："近180天净增持xx万股（x人）/ 净减持xx万股；无/有大宗减持" |
+| 催化剂确定性 | 5%   | x/10       | 例："下季报披露前有业绩预增公告；重大合同待落地"              |
+| **综合得分** | 100% | **x.x/10** | 加权合计                                                      |
+
+**高管行为评分标准**（基于近180天本地数据库数据）：
+
+- 净增持 > 0 且增持人数 ≥ 2 → **8-10分**（高管用真金白银表态）
+- 净增持 > 0 但仅1人 → **6-7分**
+- 无明显动作（0次记录） → **5分**
+- 净减持但幅度 < 持股总量1% → **3-4分**
+- 净减持且主要来自实控人/CEO/CFO → **1-2分**
 
 **一句话结论**：xxx（值得重点关注/适合中长线布局/高风险高回报/暂不推荐）
 

@@ -80,3 +80,21 @@ CREATE TABLE stocks (
     updated_at  TEXT
 );
 
+CREATE TABLE executive_hold (
+    code           TEXT,
+    announce_date  TEXT,           -- 公告日期
+    cutoff_date    TEXT,           -- 截止日期（实际变动日）
+    person_name    TEXT,           -- 高管姓名
+    person_role    TEXT,           -- 董监高职务
+    change_type    TEXT,           -- 增持 / 减持
+    shares_changed REAL,           -- 变动股数（正=增持，负=减持）
+    shares_after   REAL,           -- 期末持股数（万股）
+    avg_price      REAL,           -- 成交均价（元）
+    change_reason  TEXT,           -- 持股变动原因
+    fetched_at     TEXT,
+    PRIMARY KEY (code, cutoff_date, person_name, change_type)
+);
+
+CREATE INDEX idx_exec_hold_code ON executive_hold (code);
+CREATE INDEX idx_exec_hold_date ON executive_hold (cutoff_date);
+
