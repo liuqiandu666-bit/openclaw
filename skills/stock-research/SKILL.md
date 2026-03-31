@@ -41,8 +41,11 @@
 ### 排除条件
 
 - **ST / \*ST 股票**（数据库已过滤）
-- PE < 0（亏损股，screener 已标注 pe_warning）
-- PE > 150（极端泡沫估值，除非有特别说明）
+- PE < 0（亏损股，screener 已硬排除）
+- PE > 500（净利润趋零导致的极端失真，screener 已硬排除）
+- OCF/NI > 50（分母趋零失真，screener 已硬排除）
+
+> PE 在 150–500 之间的股票仍会出现在列表中，报告须注明"高估值成长股，需结合行业赛道判断"。
 
 ## 执行步骤
 
@@ -75,53 +78,81 @@ for c in candidates:
           f"b_class={c['b_class']} PE={m.get('pe_ttm')}")
 ```
 
-### 第二步：对 top_candidates 逐一补充详细财务数据
+### 第二步：批量补充详细财务数据
+
+> **提示**：screener JSON 已包含主要指标（合同负债同比、OCF/NI、毛利率趋势、CAPEX同比、PE、PB）。
+> 本步骤的目的是补充**规模数据**（合同负债金额、净利润绝对值）和**连续6期**原始数据用于趋势核验。
+> 可批量查询所有候选股票，无需逐只单独运行。
 
 ```python
-import sqlite3
+import sqlite3, json, datetime
 DB = "/home/liuqi/.openclaw/workspace/data/astock.db"
 conn = sqlite3.connect(DB)
 
-code = "600519"  # 6位数字，不含 sh/sz 前缀
+# 从 JSON 取候选代码列表
+today = datetime.date.today().strftime("%Y-%m-%d")
+with open(f"/home/liuqi/.openclaw/workspace/memory/screener_result_{today}.json") as f:
+    candidates = json.load(f)["top_candidates"]
+codes = [c["code"] for c in candidates]
+placeholders = ",".join("?" * len(codes))
 
-# 资产负债表（合同负债）
-bs = conn.execute("""
-    SELECT report_date, contract_liab, advance_recv, total_assets, total_liab, total_equity
-    FROM balance_sheet WHERE code=? ORDER BY report_date DESC LIMIT 6
-""", (code,)).fetchall()
+# 批量查询资产负债表（合同负债规模）
+bs_rows = conn.execute(f"""
+    SELECT code, report_date, contract_liab, advance_recv, total_assets, total_equity
+    FROM balance_sheet
+    WHERE code IN ({placeholders})
+    ORDER BY code, report_date DESC
+""", codes).fetchall()
 
-# 利润表（毛利率、净利润）
-inc = conn.execute("""
-    SELECT report_date, operate_income, operate_cost, gross_margin, netprofit
-    FROM income_stmt WHERE code=? ORDER BY report_date DESC LIMIT 6
-""", (code,)).fetchall()
+# 批量查询利润表（归母净利润优先）
+inc_rows = conn.execute(f"""
+    SELECT code, report_date, operate_income, gross_margin,
+           COALESCE(parent_netprofit, netprofit) AS ni
+    FROM income_stmt
+    WHERE code IN ({placeholders})
+    ORDER BY code, report_date DESC
+""", codes).fetchall()
 
-# 现金流量表（OCF / CAPEX）
-cf = conn.execute("""
-    SELECT report_date, netcash_operate, construct_asset
-    FROM cash_flow WHERE code=? ORDER BY report_date DESC LIMIT 6
-""", (code,)).fetchall()
+# 批量查询现金流量表
+cf_rows = conn.execute(f"""
+    SELECT code, report_date, netcash_operate, construct_asset
+    FROM cash_flow
+    WHERE code IN ({placeholders})
+    ORDER BY code, report_date DESC
+""", codes).fetchall()
 
-# 市场快照（股价 / PE / PB）
-snap = conn.execute("""
-    SELECT m.price, m.pe_ttm, m.pb, m.snap_date, i.industry_name
-    FROM market_snapshot m LEFT JOIN industry i ON m.code=i.code
-    WHERE m.code=?
-""", (code,)).fetchone()
+conn.close()
 
-for r in bs:  print("BS :", r)
-for r in inc: print("INC:", r)
-for r in cf:  print("CF :", r)
-print("MKT:", snap)
+# 按 code 分组打印（每只取前6期）
+from collections import defaultdict
+def group_by_code(rows, limit=6):
+    d = defaultdict(list)
+    for r in rows:
+        if len(d[r[0]]) < limit:
+            d[r[0]].append(r)
+    return d
+
+bs_map  = group_by_code(bs_rows)
+inc_map = group_by_code(inc_rows)
+cf_map  = group_by_code(cf_rows)
+
+for c in candidates:
+    code = c["code"]
+    print(f"\n=== {c['name']} ({code}) score={c['composite_score']} b_class={c['b_class']} ===")
+    for r in inc_map[code]: print("INC:", r)
+    for r in bs_map[code]:  print("BS :", r)
+    for r in cf_map[code]:  print("CF :", r)
 ```
 
 > **注意**：数据库 code 字段不含 sh/sz 前缀，直接用 6 位数字代码。
+> **数据核验**：打印数据中的指标应与 JSON 中 `metrics` 字段数值吻合，如有出入需优先以数据库原始数据为准。
 
 ### 第三步：生成报告并写入 memory
 
 - 格式严格按下方输出格式
 - 完整报告写入 `/home/liuqi/.openclaw/workspace/memory/stock-pick-YYYY-MM-DD.md`（日期用今日实际日期）
 - 所有符合条件的 top_candidates 全部列出，不设数量上限
+- **数据一致性检查**：报告中每个财务数字须与第二步查询输出一一对应；若 JSON 与数据库原始数据不吻合，以数据库为准并注明差异
 
 ## 输出格式
 
