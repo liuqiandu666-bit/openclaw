@@ -87,23 +87,42 @@ def _compute_score(metrics: dict) -> int:
         elif capex >= 100: score += 9
         elif capex >= 30:  score += 6
 
-    # PE估值调整（-10 to +5）
+    # PE估值调整（-15 to +5）
     pe = metrics.get("pe_ttm")
     if pe is not None:
-        if pe < 0:          score -= 10
-        elif pe > 100:      score -= 8
-        elif pe > 60:       score -= 3
+        if pe < 0:           score -= 15   # 亏损股，强力惩罚
+        elif pe > 300:       score -= 15   # 极端泡沫（净利润趋零）
+        elif pe > 100:       score -= 8
+        elif pe > 60:        score -= 3
         elif 15 <= pe <= 40: score += 5
-        elif pe <= 15:      score += 3  # 可能低估，但也需谨慎
+        elif pe <= 15:       score += 3
+
+    # OCF/NI 异常截断：>50 视为净利润极低导致的失真，不再加分
+    ocf = metrics.get("ocf_ni_ratio") or 0
+    if ocf > 50:
+        score -= 10  # 净利润几乎为零，利润质量评估失真
 
     return max(0, min(100, score))
 
 
 def _check_b_class(metrics: dict, industry_name: str | None) -> str | None:
-    """检测 B 类战略特例：核心指标远超阈值 + 国家战略方向行业。"""
+    """检测 B 类战略特例：核心指标远超阈值 + 国家战略方向行业。
+
+    提高门槛避免泛滥：CL>150% 或 OCF>2.0，且不亏损。
+    """
+    pe  = metrics.get("pe_ttm")
     cl  = metrics.get("contract_liability_yoy") or 0
     ocf = metrics.get("ocf_ni_ratio") or 0
-    far_above = cl > 80 or ocf > 1.5
+
+    # 亏损股不能是B类特例
+    if pe is not None and pe < 0:
+        return None
+
+    # OCF/NI>50 说明净利润趋零，不算真正的盈利质量优秀
+    if ocf > 50:
+        return None
+
+    far_above = cl > 150 or ocf > 2.0  # 提高门槛：原来是 cl>80 or ocf>1.5
 
     if not far_above:
         return None
@@ -430,14 +449,32 @@ def screen_from_api():
 # 主入口
 # ══════════════════════════════════════════════════════════════
 
+def _is_disqualified(r: dict) -> str | None:
+    """检查是否存在硬性排除条件，返回原因字符串或 None。"""
+    m = r.get("metrics", {})
+    pe  = m.get("pe_ttm")
+    ocf = m.get("ocf_ni_ratio") or 0
+
+    if pe is not None and pe < 0:
+        return f"亏损股(PE={pe:.1f})"
+    if pe is not None and pe > 500:
+        return f"极端估值泡沫(PE={pe:.0f})"
+    if ocf > 50:
+        return f"OCF/NI异常={ocf:.1f}(净利润趋零)"
+    return None
+
+
 def _pick_top_candidates(sorted_results: list, industry_cap: int = 5, total_cap: int = 40) -> list:
-    """从排序后的结果中挑选行业分散的优质候选（B类优先，共享 total_cap）。"""
+    """从排序后的结果中挑选行业分散的优质候选（B类优先，共享 total_cap）。
+
+    硬性排除：亏损股、PE>500极端泡沫、OCF/NI>50异常值。
+    """
     from collections import defaultdict
     industry_count: dict = defaultdict(int)
     selected = []
     seen_codes: set = set()
 
-    # 第一轮：优先放入 B 类特例（行业上限照常，但 B 类占总名额）
+    # 第一轮：优先放入 B 类特例
     for r in sorted_results:
         if len(selected) >= total_cap:
             break
@@ -446,18 +483,22 @@ def _pick_top_candidates(sorted_results: list, industry_cap: int = 5, total_cap:
         code = r["code"]
         if code in seen_codes:
             continue
+        if _is_disqualified(r):
+            continue
         ind = r.get("industry") or "未知"
         if industry_count[ind] < industry_cap:
             selected.append(r)
             seen_codes.add(code)
             industry_count[ind] += 1
 
-    # 第二轮：剩余名额填入 A 类（评分最高的）
+    # 第二轮：剩余名额填入 A 类
     for r in sorted_results:
         if len(selected) >= total_cap:
             break
         code = r["code"]
         if code in seen_codes:
+            continue
+        if _is_disqualified(r):
             continue
         ind = r.get("industry") or "未知"
         if industry_count[ind] < industry_cap:
