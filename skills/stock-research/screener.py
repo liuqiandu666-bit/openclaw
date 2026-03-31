@@ -166,16 +166,17 @@ def screen_from_db():
         GROUP BY code
     ),
     latest_inc AS (
-        SELECT code, report_date, gross_margin, netprofit,
+        SELECT code, report_date, gross_margin, netprofit, parent_netprofit,
                ROW_NUMBER() OVER (PARTITION BY code ORDER BY report_date DESC) AS rn
         FROM income_stmt
     ),
     inc_pivot AS (
         SELECT code,
-               MAX(CASE WHEN rn=1 THEN gross_margin END) AS gm0,
-               MAX(CASE WHEN rn=2 THEN gross_margin END) AS gm1,
-               MAX(CASE WHEN rn=3 THEN gross_margin END) AS gm2,
-               MAX(CASE WHEN rn=1 THEN netprofit    END) AS netprofit
+               MAX(CASE WHEN rn=1 THEN gross_margin      END) AS gm0,
+               MAX(CASE WHEN rn=2 THEN gross_margin      END) AS gm1,
+               MAX(CASE WHEN rn=3 THEN gross_margin      END) AS gm2,
+               MAX(CASE WHEN rn=1 THEN netprofit         END) AS netprofit,
+               MAX(CASE WHEN rn=1 THEN parent_netprofit  END) AS parent_netprofit
         FROM latest_inc
         WHERE rn <= 3
         GROUP BY code
@@ -197,9 +198,9 @@ def screen_from_db():
     SELECT
         s.code, s.name,
         bs.cl_latest, bs.cl_prev_year,
-        inc.gm0, inc.gm1, inc.gm2, inc.netprofit,
+        inc.gm0, inc.gm1, inc.gm2, inc.netprofit, inc.parent_netprofit,
         cf.ocf_latest, cf.capex_latest, cf.capex_prev,
-        inc.netprofit AS ni_latest,
+        COALESCE(inc.parent_netprofit, inc.netprofit) AS ni_latest,
         m.price, m.pe_ttm, m.pb, m.snap_date,
         ind.industry_name
     FROM stocks s
@@ -251,7 +252,7 @@ def screen_from_db():
         else:
             failed.append("毛利率连续改善 无数据")
 
-        # OCF / 净利润（用 income_stmt.netprofit，季报也有数据）
+        # OCF / 归母净利润（优先用 parent_netprofit，无则退回 netprofit）
         ocf = r["ocf_latest"]
         ni  = r["ni_latest"]
         if ocf is not None and ni is not None and ni != 0:
