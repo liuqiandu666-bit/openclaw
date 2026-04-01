@@ -35,7 +35,10 @@ def _request_with_timeout(self, method, url, **kwargs):
 _requests.Session.request = _request_with_timeout
 import akshare as ak
 
-DB_PATH     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "astock.db")
+DB_PATH     = os.environ.get(
+    "ASTOCK_DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "astock.db")
+)
 KEEP_PERIODS = 8     # 保留最近 N 期（YoY 需要 5 期，多存几期供扩展）
 SLEEP_OK     = 0.5   # 成功后等待（秒）
 SLEEP_ERR    = 3.0   # 失败后等待（秒）

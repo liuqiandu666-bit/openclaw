@@ -105,6 +105,80 @@ def _compute_score(metrics: dict) -> int:
     return max(0, min(100, score))
 
 
+def _exec_hold_score(code: str, conn) -> int:
+    """
+    基于近180天高管增减持行为打分（0-100）。
+
+    评分逻辑：
+    - 净增持 + 参与人数≥3  → 90-100（高管群体性看多）
+    - 净增持 + 参与人数2   → 78-85
+    - 净增持 + 参与人数1   → 62-70
+    - 无数据/无动作        → 50（中性）
+    - 净减持 + 非核心管理层 → 32-42
+    - 净减持 + 核心管理层减持（董事长/CEO/CFO） → 10-22
+    """
+    from datetime import date, timedelta
+    cutoff_180d = (date.today() - timedelta(days=180)).isoformat()
+
+    try:
+        rows = conn.execute("""
+            SELECT change_type, shares_changed, person_role
+            FROM executive_hold
+            WHERE code=? AND cutoff_date >= ?
+        """, (code, cutoff_180d)).fetchall()
+    except Exception:
+        return 50  # executive_hold 表不存在时返回中性
+
+    if not rows:
+        return 50
+
+    buy_shares  = sum(r[1] or 0 for r in rows if r[0] == "增持")
+    sell_shares = sum(abs(r[1] or 0) for r in rows if r[0] == "减持")
+    buy_count   = sum(1 for r in rows if r[0] == "增持")
+    sell_count  = sum(1 for r in rows if r[0] == "减持")
+    net = buy_shares - sell_shares
+
+    # 核心管理层减持检测（董事长/总经理/CFO/实控人等）
+    key_roles = {"董事长", "总经理", "首席执行官", "CEO", "CFO", "实控人", "控股股东", "副董事长"}
+    core_sell = any(
+        r[0] == "减持" and any(k in (r[2] or "") for k in key_roles)
+        for r in rows
+    )
+
+    if net > 0:
+        if buy_count >= 3:
+            score = 92
+        elif buy_count >= 2:
+            score = 80
+        else:
+            score = 65
+    elif buy_count == 0 and sell_count == 0:
+        score = 50
+    else:
+        if core_sell:
+            score = 15
+        elif sell_count >= 3:
+            score = 28
+        else:
+            score = 40
+
+    return score
+
+
+def _final_score(quant_score: int, exec_hold_score: int, claude_score: float | None) -> float:
+    """
+    三维度加权最终得分（满分100）：
+      量化指标    60%
+      高管增减持  20%
+      Claude投资价值评分 20%（1-10分 → 0-100）
+
+    claude_score 为 None 时用中性值 5（即50分），待 SKILL.md 中 Claude 评分后更新。
+    """
+    claude_normalized = ((claude_score or 5.0) / 10.0) * 100
+    score = quant_score * 0.6 + exec_hold_score * 0.2 + claude_normalized * 0.2
+    return round(score, 1)
+
+
 def _check_b_class(metrics: dict, industry_name: str | None) -> str | None:
     """检测 B 类战略特例：核心指标远超阈值 + 国家战略方向行业。
 
@@ -292,13 +366,18 @@ def screen_from_db():
                 metrics["pe_warning"] = f"估值偏高（PE={pe:.0f}）"
 
         if len(passed) >= 3:
-            score = _compute_score(metrics)
-            b_class = _check_b_class(metrics, r["industry_name"])
+            quant_score     = _compute_score(metrics)
+            exec_score      = _exec_hold_score(code, conn)
+            final           = _final_score(quant_score, exec_score, None)  # claude=None→中性5分
+            b_class         = _check_b_class(metrics, r["industry_name"])
             results.append({
                 "code": code, "name": name,
                 "industry": r["industry_name"],
                 "passed_count": len(passed),
-                "composite_score": score,
+                "quant_score":      quant_score,    # 量化指标得分（0-100），占60%
+                "exec_hold_score":  exec_score,     # 高管增减持得分（0-100），占20%
+                "claude_score":     None,           # Claude投资价值评分（1-10），待SKILL.md填入
+                "composite_score":  final,          # 最终综合得分（claude=5中性占位）
                 "b_class": b_class,
                 "passed": passed, "failed": failed,
                 "metrics": metrics,
@@ -532,12 +611,14 @@ if __name__ == "__main__":
         results, checked, total = screen_from_api()
         source = "akshare_api"
 
-    # 按复合评分排序
+    # 按最终综合得分排序（passed_count 相同时按 composite_score 决胜）
     sorted_results = sorted(
         results,
         key=lambda x: (x["passed_count"], x.get("composite_score", 0)),
         reverse=True,
     )
+    log(f"高管增减持评分样本（前3只）："
+        + " | ".join(f"{r['name']}={r['exec_hold_score']}" for r in sorted_results[:3]))
 
     # top_candidates：行业分散，每行业最多 5 只，总数上限 40
     top_candidates = _pick_top_candidates(sorted_results, industry_cap=5, total_cap=40)

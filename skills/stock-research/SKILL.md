@@ -74,7 +74,8 @@ candidates = data["top_candidates"]
 for c in candidates:
     m = c["metrics"]
     print(f"{c['code']} {c['name']} [{c['industry']}] "
-          f"score={c['composite_score']} passed={c['passed_count']} "
+          f"quant={c['quant_score']} exec={c['exec_hold_score']} claude={c['claude_score']} "
+          f"final={c['composite_score']} passed={c['passed_count']} "
           f"b_class={c['b_class']} PE={m.get('pe_ttm')}")
 ```
 
@@ -147,7 +148,76 @@ for c in candidates:
 > **注意**：数据库 code 字段不含 sh/sz 前缀，直接用 6 位数字代码。
 > **数据核验**：打印数据中的指标应与 JSON 中 `metrics` 字段数值吻合，如有出入需优先以数据库原始数据为准。
 
-### 第三步：生成报告并写入 memory
+### 第三步：Claude 投资价值评分（20% 权重）
+
+对每只候选股票打出 **1-10 分**的投资价值分，重新计算并更新 JSON 中的 `claude_score` 和 `composite_score`。
+
+**评分维度（5项，各2分）：**
+
+| 维度       | 满分 | 说明                                               |
+| ---------- | ---- | -------------------------------------------------- |
+| 大市场     | 2    | 行业天花板是否足够大（万亿级市场得2分，百亿级1分） |
+| 刚需高频   | 2    | 产品是否刚需、客户是否高频复购                     |
+| 成长性     | 2    | 公司规模增速是否显著高于行业均值（营收/利润增速）  |
+| 壁垒       | 2    | 技术护城河/客户粘性/资质壁垒是否突出               |
+| 市值合理性 | 2    | 当前估值是否匹配成长空间（用PE结合成长性判断）     |
+
+**评分规则：**
+
+- 基于行业知识 + 筛选结果中的 PE、行业、公司名称综合判断
+- 每项 0–2 分，合计 1–10 分（可用小数如 7.5）
+- **必须给出每项维度的得分理由**（1句话），不允许只给总分
+
+**更新 JSON 并重排序：**
+
+```python
+import json, datetime, os
+
+today = datetime.date.today().strftime("%Y-%m-%d")
+json_path = f"/home/liuqi/.openclaw/workspace/memory/screener_result_{today}.json"
+
+# 如今日文件不存在则取最近一份
+if not os.path.exists(json_path):
+    import glob
+    files = sorted(glob.glob("/home/liuqi/.openclaw/workspace/memory/screener_result_*.json"))
+    json_path = files[-1]
+
+with open(json_path) as f:
+    data = json.load(f)
+
+# ── 在此处为每只股票填入 claude_score（1-10，可含小数）──
+# 示例：claude_scores = {"000001": 7.5, "600519": 9.0, ...}
+claude_scores = {
+    # <code>: <score>,  ← 替换为实际打分
+}
+
+# 重新计算 composite_score（quant×0.6 + exec_hold×0.2 + claude×0.2）
+for c in data["top_candidates"]:
+    cs = claude_scores.get(c["code"])
+    if cs is not None:
+        c["claude_score"] = cs
+        claude_norm = (cs / 10.0) * 100
+        c["composite_score"] = round(
+            c["quant_score"] * 0.6 + c["exec_hold_score"] * 0.2 + claude_norm * 0.2, 1
+        )
+
+# 按 composite_score 降序重排
+data["top_candidates"].sort(key=lambda x: x["composite_score"], reverse=True)
+
+# 写回 JSON
+with open(json_path, "w") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+
+print("Claude 评分已更新，重排序完成")
+for c in data["top_candidates"]:
+    print(f"  {c['name']} ({c['code']}) quant={c['quant_score']} exec={c['exec_hold_score']} claude={c['claude_score']} → final={c['composite_score']}")
+```
+
+> 💡 **注意**：若某只股票行业信息不足以打分，claude_score 默认 5.0（中性），composite_score 不变。
+
+---
+
+### 第四步：生成报告并写入 memory
 
 - 完整报告写入 `/home/liuqi/.openclaw/workspace/memory/stock-pick-YYYY-MM-DD.md`（日期用今日实际日期）
 - 所有符合条件的 top_candidates 全部列出，不设数量上限
@@ -188,17 +258,35 @@ for c in candidates:
 | PE(TTM) | xx   | 低/合理/偏高/极高 |
 | PB      | x.x  | -                 |
 
+| 高管增减持（180天） | 净增持/净减持 | 行为评分 xx/100 |
+
+**Claude 投资价值评分**（5维，各2分）：
+
+| 维度       | 得分       | 理由     |
+| ---------- | ---------- | -------- |
+| 大市场     | x.x/2      | [一句话] |
+| 刚需高频   | x.x/2      | [一句话] |
+| 成长性     | x.x/2      | [一句话] |
+| 壁垒       | x.x/2      | [一句话] |
+| 市值合理性 | x.x/2      | [一句话] |
+| **合计**   | **x.x/10** | —        |
+
 **主要风险**：（1-2条）
 
-**综合评分**：composite_score=xx/100 — 一句话结论
+**综合评分**：
+
+- 量化得分（60%）：quant_score=xx
+- 高管行为（20%）：exec_hold_score=xx
+- Claude评分（20%）：claude_score=x.x/10
+- **最终：composite_score=xx/100** — 一句话结论
 
 ---
 
 #### 第三部分：汇总对比表
 
-| 排名 | 股票      | 行业 | 评分 | PE  | 合同负债同比 | OCF/NI | 结论 |
-| ---- | --------- | ---- | ---- | --- | ------------ | ------ | ---- |
-| 1    | xx (代码) | xx   | xx   | xx  | xx%          | x.xx   | xxx  |
+| 排名 | 股票      | 行业 | 量化(60%) | 高管(20%) | Claude(20%) | 综合 | PE  | 结论 |
+| ---- | --------- | ---- | --------- | --------- | ----------- | ---- | --- | ---- |
+| 1    | xx (代码) | xx   | xx        | xx        | x.x/10      | xx   | xx  | xxx  |
 
 ---
 
