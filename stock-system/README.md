@@ -3,6 +3,7 @@
 This directory is the curated, git-trackable snapshot of the local OpenClaw stock system.
 
 Use `MIGRATION.md` as the primary runbook for another machine or another AI operator.
+Use `CHECKLIST.md` as the step-by-step acceptance sheet during execution.
 
 Contents:
 

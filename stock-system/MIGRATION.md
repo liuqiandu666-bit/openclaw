@@ -3,6 +3,7 @@
 This document is written so another AI operator can migrate the stock OpenClaw system to a new Linux machine with as little guesswork as possible.
 
 Use this guide together with the git-tracked `stock-system/` bundle in the repo.
+During execution, also keep `stock-system/CHECKLIST.md` open and tick items off as each phase completes.
 
 ## Goal
 
