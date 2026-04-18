@@ -4,6 +4,7 @@ This directory is the curated, git-trackable snapshot of the local OpenClaw stoc
 
 Use `MIGRATION.md` as the primary runbook for another machine or another AI operator.
 Use `CHECKLIST.md` as the step-by-step acceptance sheet during execution.
+Use `QUICKSTART.md` for the shortest direct-execution path.
 
 Contents:
 
