@@ -1,0 +1,345 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "a0e1f2g3-3b4c-5d6e-c8f9-3865gf746cg6",
+      "agentId": "stock-researcher",
+      "name": "A 股筛选脚本执行器",
+      "enabled": false,
+      "createdAtMs": 1772609780813,
+      "updatedAtMs": 1773743400023,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 18 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "你是一个技术执行员，只负责运行 Python 脚本和处理技术问题，不做任何财务分析。\n\n【任务】运行今日 A 股筛选脚本并确认成功。\n\n第一步：检查今日结果文件是否已存在\nbash: TODAY=$(date +%Y-%m-%d); ls /home/<user>/.openclaw/workspace/memory/screener_result_$TODAY.json 2>&1\n- 文件已存在 → 打印「文件已存在，跳过运行」，任务结束\n- 文件不存在 → 继续\n\n第二步：运行筛选脚本\nbash: python3 /home/<user>/projects/openclaw/skills/stock-research/screener.py\n等待脚本自然结束。脚本运行约 20-40 分钟，期间会打印进度。\n- 看到「SCREENER_DONE status=success」表示成功，任务结束\n- 看到「[FATAL]」开头的行表示脚本遇到致命错误，将错误信息发送给用户并停止\n- 如果脚本因网络原因中途崩溃（非 FATAL），等待 30 秒后重试一次\n- 重试仍失败则将错误发送给用户并停止\n\n注意：你的职责只是确保脚本正常运行完毕。不要对结果做任何财务解读。",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 0
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "consecutiveErrors": 6,
+        "lastRunAtMs": 1773743400008,
+        "lastStatus": "error",
+        "lastDurationMs": 15,
+        "lastError": "Error: cron: job execution timed out"
+      }
+    },
+    {
+      "id": "b1b9c25a-1c16-475d-a643-1643ed524ae4",
+      "agentId": "stock-researcher",
+      "name": "A 股筛选报告生成",
+      "enabled": false,
+      "createdAtMs": 1772609780813,
+      "updatedAtMs": 1773662400016,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 20 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "生成今日 A 股筛选报告。\n\n【第一步：读取筛选结果】\nbash: TODAY=$(date +%Y-%m-%d); python3 -c \"import json; d=json.load(open(f'/home/<user>/.openclaw/workspace/memory/screener_result_{TODAY}.json')); print('STATUS:', d['status']); print(json.dumps(d['summary'], ensure_ascii=False, indent=2)); print('达标股票数:', len(d['results']))\"\n\n将上方命令的完整输出原文贴在报告开头。\n如果文件不存在或命令失败，发送消息给用户说明今日筛选数据未就绪，不要生成任何报告。\n\n【第二步：生成报告】\n读取完整 JSON 文件，按 /home/<user>/projects/openclaw/skills/stock-research/SKILL.md 格式生成报告。\n铁律：报告中每个财务数字来自 JSON 的 metrics 字段。JSON 中没有的数字写「⚠️ 数据缺失」。\n\n【第三步：历史对比】\nbash: ls /home/<user>/.openclaw/workspace/memory/stock-pick-*.md 2>/dev/null | tail -3\n如有历史文件读取最新一份，列出今日新增/移除的股票。\n\n【第四步：保存并发送】\n保存报告到 /home/<user>/.openclaw/workspace/memory/stock-pick-TODAY.md（TODAY 替换为实际日期），发送给用户。\n\n【第五步：启动深度调研】\n报告发送后，用 sessions_spawn 启动子任务：\n- model: moonshot/moonshot-v1-128k\n- message: 读取 /home/<user>/projects/openclaw/skills/stock-deep-analysis/SKILL.md 和 /home/<user>/.openclaw/workspace/memory/screener_result_TODAY.json（TODAY 替换为实际日期），对 results 中每只股票逐一深度分析，完成后将汇总表和各股结论发送给用户，并保存到 /home/<user>/.openclaw/workspace/memory/stock-deep-TODAY.md",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 0
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "lastRunAtMs": 1773662400009,
+        "lastStatus": "error",
+        "lastDurationMs": 7,
+        "consecutiveErrors": 5,
+        "lastError": "Error: cron: job execution timed out"
+      }
+    },
+    {
+      "id": "c3d7e89f-2a4b-5c6d-b7e8-2754fe635bf5",
+      "agentId": "stock-researcher",
+      "name": "A 股深度调研员",
+      "enabled": false,
+      "createdAtMs": 1741190400000,
+      "updatedAtMs": 1775030400001,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 20 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "【A股深度调研 - 编排器】\n\n⚠️ 本任务为编排器，负责调度分析、处理降级、生成双版本输出，自身不做分析。\n\n═══════════════════════════════\n第一步：读取候选股票（前12只）\n═══════════════════════════════\nbash: python3 -c \"\nimport json, glob, datetime\nfiles = sorted(glob.glob('/home/<user>/.openclaw/workspace/memory/screener_result_*.json'))\nd = json.load(open(files[-1]))\ntoday = datetime.date.today().isoformat()\nresults = d.get('results', [])\ncandidates = sorted(results, key=lambda x: x.get('composite_score', 0), reverse=True)[:12]\nprint('DATA_DATE:', d['date'])\nprint('TODAY:', today)\nprint('COUNT:', len(candidates))\nfor c in candidates:\n    m = c['metrics']\n    print(f\"CODE:{c['code']} NAME:{c['name']} SCORE:{c['composite_score']} PE:{m.get('pe_ttm')} BCLASS:{c.get('b_class','')}\")\n\"\n\n记录今日日期（TODAY）和数据日期（DATA_DATE），后续步骤使用。\n\n═══════════════════════════════\n第二步：启动深度分析（claude-cli 优先，自动降级）\n═══════════════════════════════\n首先尝试 claude-cli：\nsessions_spawn:\n  model: claude-cli/claude-sonnet-4-6\n  message: [见下方《分析子任务》]\n\n如果 spawn 返回错误（token 耗尽 / 配额超限 / 任何错误），立即降级：\nsessions_spawn:\n  model: moonshot/moonshot-v1-128k\n  message: [相同内容]\n\n等待子任务完成，获取其返回的完整分析文本。\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n《分析子任务 prompt》（复制传给 sessions_spawn）\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n严格按照 /home/<user>/projects/openclaw/skills/stock-deep-analysis/SKILL.md 的完整框架，对以下股票逐一执行深度分析：\n\n[此处替换为第一步读到的股票列表，格式：代码 名称 score PE b_class]\n\n执行步骤：\n1. 获取今日日期（bash）\n2. 批量查询本地财务数据 + 高管增减持近180天（按 SKILL.md 第二步）\n3. web_search 每只股票近期公告/新闻/行业政策\n4. 逐只撰写深度报告（含估值建模、评分依据、买入条件）\n5. 输出格式要求：\n   - 第一部分：每只股票完整分析（严格按 SKILL.md 五节框架）\n   - 第二部分（标记 ===FEISHU_SUMMARY_START===）：飞书摘要（格式见下方）\n   - 第三部分（标记 ===FEISHU_SUMMARY_END===）\n\n飞书摘要格式（简洁，**绝对禁止**出现以下词汇：合同负债、预收账款、OCF、现金流含量、毛利率、CAPEX、归母净利润、净利润、B类、A类、量化达标、筛选指标）：\n---\n📈 精选个股（DATA_DATE 数据）\n\n🏆 核心标的（当前可关注）\n• [股票名] [代码] ｜ PE xx ｜ [从业务/行业/景气度/基本面角度描述，≤15字]\n\n📌 中线布局（等待信号）\n• [股票名] [代码] ｜ PE xx ｜ [从业务/行业/景气度/基本面角度描述，≤15字]\n\n⏳ 暂缓（高估值/待验证）\n• [股票名] [代码] ｜ PE xx ｜ [原因，≤10字]\n---\n一句话结论写法参考（用这类表达，不暴露指标）：\n✅ 订单景气度高，扩张提速\n✅ 行业景气向上，业绩确定性强\n✅ 基本面持续改善，估值合理\n✅ 国产替代加速，成长空间大\n✅ 盈利能力增强，当前价位合理\n✅ 新能源赛道龙头，中长线可期\n✅ 等待回调至支撑位\n✅ 下季报验证后再看\n✅ 高成长但估值偏贵，等待\n\n分类标准：\n- 核心：综合评分 ≥ 7.5/10 且入场时机=「立即可关注」\n- 中线：综合评分 6-7.5 或入场时机=「等待回调/等待财报验证」\n- 暂缓：综合评分 < 6 或 PE 极高或有重大风险\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n═══════════════════════════════\n第三步：保存详细报告到文件\n═══════════════════════════════\n将子任务返回的第一部分（完整分析，不含飞书摘要标记）写入：\n/home/<user>/projects/openclaw/reports/stock-deep-TODAY.md\n（TODAY 替换为实际日期）\n\nbash: cat > /home/<user>/projects/openclaw/reports/stock-deep-TODAY.md << 'REPORT'\n[子任务完整分析内容]\nREPORT\n\n═══════════════════════════════\n第四步：推送到 GitHub，获取链接\n═══════════════════════════════\nbash: \\\n  git add reports/stock-deep-TODAY.md && \\\n  git commit -m \"report: A股深度调研 TODAY\" && \\\n  git push origin main && \\\n  echo \"REPORT_URL:https://github.com/liuqiandu666-bit/openclaw/blob/main/reports/stock-deep-TODAY.md\"\n\n记录输出的 REPORT_URL。\n\n═══════════════════════════════\n第五步：发送飞书消息（只发摘要 + 链接）\n═══════════════════════════════\n飞书消息内容 = 子任务返回的飞书摘要部分（===FEISHU_SUMMARY_START=== 和 ===FEISHU_SUMMARY_END=== 之间的内容）+ 以下链接行：\n\n[📊 查看完整分析报告 →](REPORT_URL)\n\n将此消息发送给用户。不要附加任何筛选过程、指标说明或方法论内容。",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 10800
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "d4e5f6a7-7b8c-9d0e-a1b2-4976ca857da7",
+      "agentId": "stock-researcher",
+      "name": "A股市场快照每日刷新",
+      "enabled": false,
+      "createdAtMs": 1743048000000,
+      "updatedAtMs": 1775612675533,
+      "schedule": {
+        "kind": "cron",
+        "expr": "13 18 * * 1-5",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "【A股市场快照每日刷新】\n\n每个交易日收盘后自动更新全市场 PE/PB/股价数据。\n\n第一步：检查今天是否交易日\nbash: python3 -c \"\nimport baostock as bs\nlg = bs.login()\nfrom datetime import date\ntoday = date.today().isoformat()\nrs = bs.query_trade_dates(start_date=today, end_date=today)\ndata = []\nwhile rs.error_code=='0' and rs.next(): data.append(rs.get_row_data())\nbs.logout()\nif data and data[0][1]=='1': print('TRADING_DAY')\nelse: print('NOT_TRADING_DAY')\n\"\n- NOT_TRADING_DAY → 输出「今日非交易日，跳过」，任务结束\n- TRADING_DAY → 继续\n\n第二步：运行市场快照更新\nbash: cd /home/<user>/.openclaw/workspace/data && python3 build_db.py --market-bs 2>&1 | tail -5\n\n第三步：确认结果\nbash: python3 /home/<user>/.openclaw/workspace/data/build_db.py --status 2>&1 | grep '市场快照'\n\n将最终结果（快照只数和日期）发送给用户，一句话即可，不需要详细分析。",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 7200
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "consecutiveErrors": 0,
+        "lastRunAtMs": 1775612574520,
+        "lastStatus": "ok",
+        "lastDurationMs": 101013
+      }
+    },
+    {
+      "id": "e5f6a7b8-8c9d-0e1f-b2c3-5a87db968eb8",
+      "agentId": "stock-researcher",
+      "name": "A股财报季增量更新",
+      "enabled": true,
+      "createdAtMs": 1743048000000,
+      "updatedAtMs": 1776474444610,
+      "schedule": {
+        "kind": "cron",
+        "expr": "7 3 * 3,4,8,10 *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "【A股财报季增量更新】\n\n每年3月、4月（年报+一季报）、8月（中报）、10月（三季报）披露期，每天凌晨3点自动重抓最新财务数据。\n\n第一步：查看当前状态\nbash: python3 /home/<user>/.openclaw/workspace/data/build_db.py --status 2>&1\n\n第二步：强制重抓所有财务报表（获取最新季报/年报数据）\nbash: cd /home/<user>/.openclaw/workspace/data && python3 build_db.py --refresh --workers 5 2>&1 | tail -20\n此步骤约需 5-8 小时，耐心等待完成。\n\n第三步：完成后查看最新状态并通知用户\nbash: python3 /home/<user>/.openclaw/workspace/data/build_db.py --status 2>&1\n\n将结果（财务报表覆盖率、成功/失败数量）发送给用户，一句话汇报即可。",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 0
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "consecutiveErrors": 9,
+        "nextRunAtMs": 1776539220000,
+        "lastRunAtMs": 1776474385753,
+        "lastStatus": "error",
+        "lastDurationMs": 58857,
+        "lastError": "cron delivery target is missing"
+      }
+    },
+    {
+      "id": "f6g7h8i9-6e7f-8g9h-f1i2-6198ji079fj9",
+      "agentId": "stock-researcher",
+      "name": "小说写作看门狗",
+      "enabled": false,
+      "createdAtMs": 1773279600000,
+      "updatedAtMs": 1773964824909,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */2 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "【小说进度看门狗】\n\n第一步：读取并验证进度\nbash: python3 -c \"\nimport json, datetime, sys, os\ntry:\n    p = json.load(open('/home/<user>/.openclaw/workspace/shared-novel/progress.json'))\nexcept:\n    print('NOT_FOUND'); sys.exit()\nif p.get('status') == 'completed':\n    print('DONE'); sys.exit()\nstage = p.get('pipeline', {}).get('stage', 'writing')\nlast = p.get('last_updated', '')\ndelta_min = 9999\nif last:\n    delta_min = (datetime.datetime.now() - datetime.datetime.fromisoformat(last.replace('Z',''))).total_seconds() / 60\nprint(f'stage={stage} finalized={p.get(\\\"total_finalized\\\",0)} delta_min={int(delta_min)}')\n\"\n\n判断逻辑：\n- NOT_FOUND 或 DONE → 任务结束\n- delta_min < 120 → 输出「OK: 流程活跃」，任务结束，不干预\n- stage 为 revising 或 rewriting 且 delta_min < 360 → 输出「OK: 正在修改/重写中」，任务结束\n- 其余情况认为卡住，继续第二步\n\n第二步：用 total_finalized 确定下一章并诊断卡住位置\nbash: python3 -c \"\nimport json, os\np = json.load(open('/home/<user>/.openclaw/workspace/shared-novel/progress.json'))\nn = p.get('total_finalized', 0) + 1\nnnn = str(n).zfill(3)\nbase = '/home/<user>/.openclaw/workspace/shared-novel'\nchief = f'{base}/reviews/chapter_{nnn}_chief_report.md'\ndraft = f'{base}/drafts/chapter_{nnn}.md'\nfinal = f'{base}/final/chapter_{nnn}.md'\n\n# 新增：检查草稿字数\nword_count = 0\nif os.path.exists(draft):\n    with open(draft, 'r', encoding='utf-8') as f:\n        content = f.read()\n        # 计算中文字数（粗略估算）\n        word_count = len(content)\n        # 检查是否包含终审报告（错误情况）\n        if '终审报告' in content[:500] or '需修改' in content[:500]:\n            print(f'ERROR:终审报告被写入草稿')\n    print(f'word_count={word_count}')\n\nif os.path.exists(final):\n    print(f'STAGE:already_final chapter={n}')\nelif os.path.exists(chief):\n    print(f'STAGE:loop_d chapter={n}')\n    print(open(chief).read()[:300])\nelif os.path.exists(draft):\n    done = [f for f in os.listdir(f'{base}/reviews') if f.startswith(f'chapter_{nnn}_') and 'chief' not in f]\n    print(f'STAGE:loop_b chapter={n} reviews_done={len(done)}')\nelse:\n    print(f'STAGE:loop_a chapter={n}')\n\"\n\n新增判断：\n- 如果检测到 ERROR:终审报告被写入草稿 → 立即修复草稿，删除错误内容\n- 如果 word_count < 5000 且 stage 为 revising/rewriting → 启动续写任务\n\n根据诊断结果：\n- STAGE:already_final → 修正 progress.json 的 current_chapter 和 total_finalized，继续下一章\n- STAGE:loop_d → 读终审报告执行 Loop D 决策，将报告路径传给 writer（必须包含明确字数要求）\n- STAGE:loop_b → 草稿存在评审不全，重新并行启动缺失评审员，然后按 SKILL.md 继续 Loop C/D\n- STAGE:loop_a → 按以下步骤执行（不询问用户，完成后直接继续到loop_b）：\n  1. spawn writer 写新章节（必须包含明确字数要求、章节规划全文）\n  2. 轮询等待草稿就绪（每30秒，最多60分钟）\n  3. 草稿就绪（字数≥5000）→ 立刻进入 loop_b，并行spawn全部6个评审员\n  4. 不依赖子任务完成通知，主动轮询+继续，不等待\n\n关键优化：所有 writer 任务必须包含：\n1. 明确字数目标：6000-7000字\n2. 分段字数规划：每个场景的字数范围\n3. 完成检查清单：字数达标、问题解决、情节完整\n4. 输出格式：只输出正文，不要包含终审报告\n\n铁律：绝不停下等用户决策。收到 sessions_spawn 子任务完成通知后，简短汇报进展，立刻继续下一步。\n\n读取 ~/.openclaw/workspace/skills/novel-multiagent/SKILL.md 了解完整流程，全程自动推进不询问用户。",
+        "model": "deepseek/deepseek-chat",
+        "thinking": "off",
+        "timeoutSeconds": 0
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "novel"
+      },
+      "state": {
+        "consecutiveErrors": 0,
+        "lastRunAtMs": 1773964801540,
+        "lastStatus": "ok",
+        "lastDurationMs": 23369
+      }
+    },
+    {
+      "id": "f7a2b3c4-9d0e-1f2a-b3c4-7d8e9f0a1b2c",
+      "agentId": "stock-researcher",
+      "name": "A股高管增减持月度刷新",
+      "enabled": true,
+      "createdAtMs": 1774984800000,
+      "updatedAtMs": 1775352437389,
+      "schedule": {
+        "kind": "cron",
+        "expr": "17 9 5 * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "【A股高管增减持月度刷新】\n\n每月5日上午自动从巨潮资讯拉取全市场高管增减持数据，约需30-60秒。\n\n第一步：运行抓取（最多重试3次，因巨潮接口偶尔超时）\nbash: for i in 1 2 3; do\n  python3 /home/<user>/.openclaw/workspace/data/build_db.py --executive-hold 2>&1\n  STATUS=$?\n  if [ $STATUS -eq 0 ]; then break; fi\n  echo \"第${i}次失败，30秒后重试...\"\n  sleep 30\ndone\n\n第二步：验证结果\nbash: python3 -c \"\nimport sqlite3\nconn = sqlite3.connect('/home/<user>/.openclaw/workspace/data/astock.db')\ncnt   = conn.execute(\\\"SELECT COUNT(*) FROM executive_hold\\\").fetchone()[0]\ncodes = conn.execute(\\\"SELECT COUNT(DISTINCT code) FROM executive_hold\\\").fetchone()[0]\ndt    = conn.execute(\\\"SELECT MAX(cutoff_date) FROM executive_hold\\\").fetchone()[0]\ninc   = conn.execute(\\\"SELECT COUNT(*) FROM executive_hold WHERE change_type='增持'\\\").fetchone()[0]\ndec   = conn.execute(\\\"SELECT COUNT(*) FROM executive_hold WHERE change_type='减持'\\\").fetchone()[0]\nprint(f'高管增减持数据：{cnt}条（增持{inc} 减持{dec}），涉及{codes}只，最新截止日{dt}')\nconn.close()\n\"\n\n将第二步的输出一句话发送给用户即可，不需要分析内容。",
+        "model": "deepseek/deepseek-reasoner",
+        "thinking": "on",
+        "timeoutSeconds": 600
+      },
+      "delivery": {
+        "mode": "announce",
+        "target": "user:ou_<feishu_user_open_id>",
+        "accountId": "<feishu_account_id>"
+      },
+      "state": {
+        "consecutiveErrors": 1,
+        "lastRunAtMs": 1775351820007,
+        "lastStatus": "error",
+        "lastDurationMs": 617382,
+        "lastError": "Error: cron: job execution timed out",
+        "nextRunAtMs": 1777943820000
+      }
+    },
+    {
+      "id": "1108b9e0-e616-4f8c-8f31-efba2fc9816b",
+      "agentId": "stock-researcher",
+      "name": "A股财报季增量更新完成检查",
+      "enabled": false,
+      "createdAtMs": 1774834896701,
+      "updatedAtMs": 1774926033342,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 1800000,
+        "anchorMs": 1711782000000
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "检查A股财报季增量更新任务是否完成。如果进程dawn-ridge已结束，运行：python3 /home/<user>/.openclaw/workspace/data/build_db.py --status 2>&1，然后将结果发送给用户。如果进程仍在运行，则等待下次检查。"
+      },
+      "delivery": {
+        "mode": "announce"
+      },
+      "state": {
+        "lastRunAtMs": 1774926001449,
+        "lastStatus": "ok",
+        "lastDurationMs": 31893,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "86d3cc57-648b-4102-97c4-4af80039ddfa",
+      "agentId": "stock-researcher",
+      "name": "检查A股财报更新完成状态",
+      "enabled": false,
+      "deleteAfterRun": true,
+      "createdAtMs": 1775329658424,
+      "updatedAtMs": 1775358427724,
+      "schedule": {
+        "kind": "at",
+        "at": "2026-04-05T03:07:00.000Z"
+      },
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "【A股财报季增量更新】8小时已过，请检查数据库更新任务是否完成。执行命令：python3 /home/<user>/.openclaw/workspace/data/build_db.py --status 2>&1"
+      },
+      "state": {
+        "lastRunAtMs": 1775358420027,
+        "lastStatus": "error",
+        "lastDurationMs": 7697,
+        "lastError": "Feishu account \"default\" not configured",
+        "consecutiveErrors": 1
+      }
+    },
+    {
+      "id": "b09f7200-a6ed-4571-bbd2-d879f2491037",
+      "agentId": "stock-researcher",
+      "name": "检查A股财报更新完成状态",
+      "enabled": false,
+      "deleteAfterRun": true,
+      "createdAtMs": 1775416064208,
+      "updatedAtMs": 1775473623710,
+      "schedule": {
+        "kind": "at",
+        "at": "2026-04-06T11:07:00.000Z"
+      },
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "【A股财报季增量更新完成检查】强制重抓任务已运行约8小时，请检查任务完成状态并汇报结果。"
+      },
+      "state": {
+        "lastRunAtMs": 1775473620014,
+        "lastStatus": "error",
+        "lastDurationMs": 3696,
+        "lastError": "Feishu account \"default\" not configured",
+        "consecutiveErrors": 1
+      }
+    },
+    {
+      "id": "9024e002-1f5e-420b-802c-ff289b4536b1",
+      "agentId": "stock-researcher",
+      "name": "检查A股财报更新进度",
+      "enabled": false,
+      "deleteAfterRun": true,
+      "createdAtMs": 1775502453234,
+      "updatedAtMs": 1775516525693,
+      "schedule": {
+        "kind": "at",
+        "at": "2026-04-06T23:00:00.000Z"
+      },
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "【A股财报季增量更新进度检查】财务报表重抓任务已运行约4小时，请检查进度并完成第三步状态检查。"
+      },
+      "state": {
+        "lastRunAtMs": 1775516400005,
+        "lastStatus": "error",
+        "lastDurationMs": 125688,
+        "lastError": "Feishu account \"default\" not configured",
+        "consecutiveErrors": 1
+      }
+    }
+  ]
+}

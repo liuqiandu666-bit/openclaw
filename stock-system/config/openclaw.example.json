@@ -1,0 +1,827 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.6-3",
+    "lastTouchedAt": "2026-04-08T09:16:18.679Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-02-01T04:03:56.511Z",
+    "lastRunVersion": "2026.1.30",
+    "lastRunCommand": "configure",
+    "lastRunMode": "local"
+  },
+  "browser": {
+    "enabled": true,
+    "executablePath": "/snap/bin/chromium",
+    "headless": true,
+    "noSandbox": true,
+    "defaultProfile": "openclaw"
+  },
+  "auth": {
+    "profiles": {
+      "qwen-portal:default": {
+        "provider": "qwen-portal",
+        "mode": "oauth"
+      },
+      "anthropic:claude-cli": {
+        "provider": "anthropic",
+        "mode": "oauth"
+      },
+      "openai-codex:default": {
+        "provider": "openai-codex",
+        "mode": "oauth"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com",
+        "apiKey": "<fill-me>",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 15,
+              "output": 75,
+              "cacheRead": 1.5,
+              "cacheWrite": 18.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32000
+          }
+        ]
+      },
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com/v1",
+        "apiKey": "<fill-me>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "deepseek-chat",
+            "name": "DeepSeek Chat",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.27,
+              "output": 1.1,
+              "cacheRead": 0.07,
+              "cacheWrite": 0
+            },
+            "contextWindow": 64000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-reasoner",
+            "name": "DeepSeek R1",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 4,
+              "output": 16,
+              "cacheRead": 1,
+              "cacheWrite": 0
+            },
+            "contextWindow": 64000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "moonshot": {
+        "baseUrl": "https://api.moonshot.cn/v1",
+        "apiKey": "<fill-me>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "moonshot-v1-128k",
+            "name": "Kimi 128k",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 8,
+              "output": 8,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "kimi-k2-turbo-preview",
+            "name": "Kimi K2 Turbo",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 2,
+              "output": 8,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "kimi-k2-thinking-turbo",
+            "name": "Kimi K2 Thinking Turbo",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 4,
+              "output": 16,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "kimi-k2.5",
+            "name": "Kimi K2.5",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 3.24,
+              "output": 15.84,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 65535
+          }
+        ]
+      },
+      "dashscope": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "<fill-me>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen-plus",
+            "name": "Qwen Plus",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.8,
+              "output": 2.4,
+              "cacheRead": 0.2,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen-turbo",
+            "name": "Qwen Turbo",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.3,
+              "output": 0.6,
+              "cacheRead": 0.07,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen-max",
+            "name": "Qwen Max",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 2.4,
+              "output": 9.6,
+              "cacheRead": 0.6,
+              "cacheWrite": 0
+            },
+            "contextWindow": 32000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "glm-5",
+            "name": "GLM-5",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsDeveloperRole": false
+            }
+          },
+          {
+            "id": "qwen3-max-2026-01-23",
+            "name": "qwen3-max-2026-01-23",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 2.5,
+              "output": 10,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsDeveloperRole": false
+            }
+          },
+          {
+            "id": "qwen3.5-122b-a10b",
+            "name": "Qwen3.5 122B",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 0.72,
+              "output": 2.88,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 32768,
+            "compat": {
+              "supportsDeveloperRole": false
+            }
+          },
+          {
+            "id": "qwen3.5-plus-2026-02-15",
+            "name": "Qwen3.5 Plus",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.72,
+              "output": 2.16,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 65536,
+            "compat": {
+              "supportsDeveloperRole": false
+            }
+          }
+        ]
+      },
+      "minimax": {
+        "baseUrl": "https://api.minimax.chat/v1",
+        "apiKey": "<fill-me>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "MiniMax-M2.7",
+            "name": "MiniMax M2.7",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 2.1,
+              "output": 8.4,
+              "cacheRead": 0.42,
+              "cacheWrite": 2.625
+            },
+            "contextWindow": 204800,
+            "maxTokens": 32768
+          },
+          {
+            "id": "MiniMax-M2.5",
+            "name": "MiniMax M2.5",
+            "reasoning": true,
+            "input": ["text"],
+            "cost": {
+              "input": 2.1,
+              "output": 8.4,
+              "cacheRead": 0.42,
+              "cacheWrite": 2.625
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "MiniMax-M2.1",
+            "name": "MiniMax M2.1",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0.8,
+              "output": 2.4,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 32768
+          }
+        ]
+      },
+      "qwen-portal": {
+        "baseUrl": "https://portal.qwen.ai/v1",
+        "apiKey": "<fill-me>",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "coder-model",
+            "name": "Qwen Coder",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "vision-model",
+            "name": "Qwen Vision",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "fallbacks": ["deepseek/deepseek-chat", "moonshot/kimi-k2-turbo-preview"],
+        "primary": "moonshot/kimi-k2-turbo-preview"
+      },
+      "models": {
+        "qwen-portal/coder-model": {
+          "alias": "qwen"
+        },
+        "qwen-portal/vision-model": {},
+        "moonshot/moonshot-v1-128k": {},
+        "moonshot/kimi-k2-turbo-preview": {},
+        "moonshot/kimi-k2-thinking-turbo": {},
+        "openai-codex/gpt-5.3-codex": {
+          "alias": "codex"
+        },
+        "anthropic/claude-sonnet-4-6": {
+          "alias": "claude-sonnet"
+        },
+        "anthropic/claude-opus-4-6": {
+          "alias": "claude-opus"
+        },
+        "deepseek/deepseek-chat": {
+          "params": {
+            "temperature": 0
+          }
+        },
+        "deepseek/deepseek-reasoner": {},
+        "minimax/MiniMax-M2.7": {
+          "alias": "minimax"
+        },
+        "minimax/MiniMax-M2.5": {},
+        "minimax/MiniMax-M2.1": {},
+        "dashscope/qwen-plus": {
+          "alias": "qwen-plus"
+        },
+        "dashscope/qwen-turbo": {
+          "alias": "qwen-turbo"
+        },
+        "dashscope/qwen-max": {
+          "alias": "qwen-max"
+        },
+        "dashscope/qwen3-max-2026-01-23": {
+          "alias": "qwen3-max"
+        },
+        "dashscope/qwen3.5-plus-2026-02-15": {
+          "alias": "qwen35-plus"
+        },
+        "dashscope/qwen3.5-122b-a10b": {
+          "alias": "qwen35-122b"
+        },
+        "dashscope/glm-5": {
+          "alias": "glm-5"
+        },
+        "moonshot/kimi-k2.5": {
+          "alias": "kimi25"
+        }
+      },
+      "workspace": "/home/<user>/.openclaw/workspace",
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "1m",
+        "keepLastAssistants": 2,
+        "softTrimRatio": 0.65,
+        "hardClearRatio": 0.8,
+        "minPrunableToolChars": 2000,
+        "hardClear": {
+          "enabled": true,
+          "placeholder": "[工具结果已自动压缩以节省上下文空间]"
+        }
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 30000
+        }
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "name": "主智能体",
+        "workspace": "/home/<user>/.openclaw/workspace",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["moonshot/kimi-k2-turbo-preview", "deepseek/deepseek-chat"]
+        },
+        "subagents": {
+          "allowAgents": ["*"]
+        }
+      },
+      {
+        "id": "planner",
+        "name": "大纲规划师",
+        "workspace": "/home/<user>/.openclaw/workspace-planner",
+        "model": {
+          "primary": "dashscope/qwen3.5-122b-a10b",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "writer",
+        "name": "主创作者",
+        "workspace": "/home/<user>/.openclaw/workspace-writer",
+        "model": {
+          "primary": "minimax/MiniMax-M2.7",
+          "fallbacks": ["minimax/MiniMax-M2.5", "deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "clue-tracker",
+        "name": "线索追踪员",
+        "workspace": "/home/<user>/.openclaw/workspace-clue-tracker",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "character-manager",
+        "name": "角色管理员",
+        "workspace": "/home/<user>/.openclaw/workspace-character-manager",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "reader-logic",
+        "name": "逻辑审查员",
+        "workspace": "/home/<user>/.openclaw/workspace-reader-logic",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": [
+            "deepseek/deepseek-chat",
+            "moonshot/kimi-k2-turbo-preview",
+            "dashscope/glm-5"
+          ]
+        }
+      },
+      {
+        "id": "reader-emotion",
+        "name": "情感审查员",
+        "workspace": "/home/<user>/.openclaw/workspace-reader-emotion",
+        "model": {
+          "primary": "moonshot/kimi-k2-turbo-preview",
+          "fallbacks": ["minimax/MiniMax-M2.1", "deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "reader-scifi",
+        "name": "科幻审查员",
+        "workspace": "/home/<user>/.openclaw/workspace-reader-scifi",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "continuity-checker",
+        "name": "连续性检查员",
+        "workspace": "/home/<user>/.openclaw/workspace-continuity-checker",
+        "model": {
+          "primary": "deepseek/deepseek-chat",
+          "fallbacks": ["deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "chief-editor",
+        "name": "审核官",
+        "workspace": "/home/<user>/.openclaw/workspace-chief-editor",
+        "model": {
+          "primary": "dashscope/qwen3.5-122b-a10b",
+          "fallbacks": ["deepseek/deepseek-chat"]
+        }
+      },
+      {
+        "id": "stock-researcher",
+        "name": "股票筛选员",
+        "workspace": "/home/<user>/.openclaw/workspace-stock-researcher",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": [
+            "moonshot/kimi-k2-turbo-preview",
+            "deepseek/deepseek-chat",
+            "dashscope/qwen-plus"
+          ]
+        }
+      },
+      {
+        "id": "stock-director",
+        "name": "股票研究总监",
+        "workspace": "/home/<user>/.openclaw/workspace-stock-director",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": [
+            "openai-codex/gpt-5.3-codex",
+            "moonshot/kimi-k2-thinking-turbo",
+            "dashscope/qwen-plus"
+          ]
+        },
+        "subagents": {
+          "allowAgents": ["stock-researcher", "stock-analyst", "stock-fetcher"]
+        }
+      },
+      {
+        "id": "stock-analyst",
+        "name": "深度分析师",
+        "workspace": "/home/<user>/.openclaw/workspace-stock-analyst",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "dashscope/qwen-plus"]
+        }
+      },
+      {
+        "id": "stock-fetcher",
+        "name": "数据采集员",
+        "workspace": "/home/<user>/.openclaw/workspace-stock-fetcher",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex",
+          "fallbacks": ["deepseek/deepseek-reasoner", "moonshot/kimi-k2-thinking-turbo"]
+        }
+      },
+      {
+        "id": "code-orchestrator",
+        "name": "代码优化主控",
+        "workspace": "/home/<user>/.openclaw/workspace-code-orchestrator",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "deepseek/deepseek-chat"]
+        },
+        "subagents": {
+          "allowAgents": [
+            "web-tester",
+            "web-frontend",
+            "java-backend",
+            "android-dev",
+            "code-quality",
+            "debug-logger",
+            "code-validator"
+          ]
+        }
+      },
+      {
+        "id": "web-frontend",
+        "name": "Web 前端优化专家",
+        "workspace": "/home/<user>/.openclaw/workspace-web-frontend",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "moonshot/kimi-k2-turbo-preview"]
+        }
+      },
+      {
+        "id": "java-backend",
+        "name": "Java 服务端优化专家",
+        "workspace": "/home/<user>/.openclaw/workspace-java-backend",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "moonshot/kimi-k2-turbo-preview"]
+        }
+      },
+      {
+        "id": "android-dev",
+        "name": "Android 优化专家",
+        "workspace": "/home/<user>/.openclaw/workspace-android-dev",
+        "model": {
+          "primary": "openai-codex/gpt-5.3-codex",
+          "fallbacks": ["moonshot/kimi-k2-thinking-turbo", "moonshot/kimi-k2-turbo-preview"]
+        }
+      },
+      {
+        "id": "code-quality",
+        "name": "通用代码质量专家",
+        "workspace": "/home/<user>/.openclaw/workspace-code-quality",
+        "model": {
+          "primary": "moonshot/kimi-k2-turbo-preview",
+          "fallbacks": ["deepseek/deepseek-chat", "dashscope/qwen-plus"]
+        }
+      },
+      {
+        "id": "debug-logger",
+        "name": "调试与日志专家",
+        "workspace": "/home/<user>/.openclaw/workspace-debug-logger",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["deepseek/deepseek-chat", "dashscope/qwen-plus"]
+        }
+      },
+      {
+        "id": "web-tester",
+        "name": "Web 界面测试员",
+        "workspace": "/home/<user>/.openclaw/workspace-web-tester",
+        "model": {
+          "primary": "deepseek/deepseek-chat",
+          "fallbacks": ["moonshot/kimi-k2-turbo-preview", "dashscope/qwen-plus"]
+        }
+      },
+      {
+        "id": "code-validator",
+        "name": "验证与回归专家",
+        "workspace": "/home/<user>/.openclaw/workspace-code-validator",
+        "model": {
+          "primary": "deepseek/deepseek-reasoner",
+          "fallbacks": ["moonshot/kimi-k2-turbo-preview", "dashscope/qwen-plus"]
+        }
+      },
+      {
+        "id": "maintenance-consultant",
+        "name": "维护售后咨询师",
+        "workspace": "/home/<user>/.openclaw/workspace-maintenance-consultant",
+        "model": {
+          "primary": "deepseek/deepseek-chat",
+          "fallbacks": ["moonshot/kimi-k2-turbo-preview", "dashscope/qwen-plus"]
+        },
+        "tools": {
+          "profile": "minimal"
+        }
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "feishu",
+        "accountId": "novel"
+      }
+    },
+    {
+      "agentId": "stock-director",
+      "match": {
+        "channel": "feishu",
+        "accountId": "<feishu_account_id>"
+      }
+    },
+    {
+      "agentId": "code-orchestrator",
+      "match": {
+        "channel": "feishu",
+        "accountId": "coder"
+      }
+    },
+    {
+      "agentId": "maintenance-consultant",
+      "match": {
+        "channel": "feishu",
+        "accountId": "service"
+      }
+    }
+  ],
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "queue": {
+      "cap": 5,
+      "drop": "summarize"
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "allowlist",
+      "selfChatMode": true,
+      "allowFrom": ["+8617688708655"],
+      "groupPolicy": "allowlist",
+      "mediaMaxMb": 50,
+      "debounceMs": 0
+    },
+    "telegram": {
+      "enabled": false,
+      "dmPolicy": "open",
+      "botToken": "8691335138:AAFcthZShCEHZjcTSP8m6C5LEdLiGUltTgI",
+      "allowFrom": ["*"],
+      "groupPolicy": "allowlist",
+      "streamMode": "partial"
+    },
+    "feishu": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "accounts": {
+        "novel": {
+          "appId": "cli_a925599956b95bcb",
+          "appSecret": "fef3uFoEHPYcBHAYeGY2GEhmNraqGEWG",
+          "botName": "墨灵"
+        },
+        "stock": {
+          "appId": "cli_a93ba1b519229cd1",
+          "appSecret": "fZt1mnLzcmwLe4yyqIUjHhoaqKOucRtc",
+          "botName": "小金"
+        },
+        "coder": {
+          "appId": "cli_a956247708b91bc2",
+          "appSecret": "nkbn9kD7FA8U2Rex4Tk8idHUsRxVydAU",
+          "botName": "码匠"
+        },
+        "service": {
+          "appId": "TODO_填入飞书机器人appId",
+          "appSecret": "TODO_填入飞书机器人appSecret",
+          "botName": "维小助"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "token": "<fill-me>"
+    }
+  },
+  "plugins": {
+    "load": {
+      "paths": ["/home/<user>/projects/openclaw/extensions/dingtalk"]
+    },
+    "entries": {
+      "whatsapp": {
+        "enabled": false
+      },
+      "qwen-portal-auth": {
+        "enabled": true
+      },
+      "telegram": {
+        "enabled": false
+      },
+      "feishu": {
+        "enabled": true
+      },
+      "dingtalk": {
+        "enabled": false
+      }
+    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "perplexity",
+        "perplexity": {
+          "apiKey": "<fill-me>",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "model": "perplexity/sonar-pro"
+        }
+      }
+    }
+  }
+}
