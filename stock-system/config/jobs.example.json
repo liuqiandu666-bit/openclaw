@@ -138,7 +138,7 @@
       "name": "A股财报季增量更新",
       "enabled": true,
       "createdAtMs": 1743048000000,
-      "updatedAtMs": 1776474444610,
+      "updatedAtMs": 1777524095330,
       "schedule": {
         "kind": "cron",
         "expr": "7 3 * 3,4,8,10 *",
@@ -159,11 +159,11 @@
         "accountId": "<feishu_account_id>"
       },
       "state": {
-        "consecutiveErrors": 9,
-        "nextRunAtMs": 1776539220000,
-        "lastRunAtMs": 1776474385753,
+        "consecutiveErrors": 21,
+        "nextRunAtMs": 1785524820000,
+        "lastRunAtMs": 1777511411203,
         "lastStatus": "error",
-        "lastDurationMs": 58857,
+        "lastDurationMs": 12684127,
         "lastError": "cron delivery target is missing"
       }
     },

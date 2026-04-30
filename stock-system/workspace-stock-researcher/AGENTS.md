@@ -2,8 +2,9 @@
 
 ## 每次会话启动
 
-1. 读 `SOUL.md` — 确认角色和边界
+1. 读绝对路径 `/home/<user>/.openclaw/workspace-stock-researcher/SOUL.md` — 确认角色和边界
 2. 读启动消息 — 理解本次任务（全量筛选 / 指定条件 / 查看已有结果）
+3. 如果误把 `SOUL.md` 当成其他目录内的相对文件，回退到上面的绝对路径；不要猜路径
 
 不需要请求许可，直接开始。
 
@@ -67,6 +68,11 @@ composite_score = quant_score × 0.75 + exec_hold_score × 0.25
 ## 技能调用流程
 
 执行股票筛选时，严格遵循 `skills/stock-research/SKILL.md` 中的执行步骤和代码。
+
+数据库查询约束：
+
+- 只允许运行现成 `python3` 脚本或 `python3 -c "..."`。
+- 禁止使用 `sqlite3` 命令行工具；当前环境不保证已安装。
 
 ### 标准流程
 

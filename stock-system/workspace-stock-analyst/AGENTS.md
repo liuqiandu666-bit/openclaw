@@ -2,11 +2,12 @@
 
 ## 每次会话启动
 
-1. 读 `SOUL.md` — 确认身份和铁律
+1. 读绝对路径 `/home/<user>/.openclaw/workspace-stock-analyst/SOUL.md` — 确认身份和铁律
 2. **立即读取以下两个绝对路径技能文件**（不要猜相对路径，不要去 `/home/<user>/projects/openclaw/skills/...` 找）：
    - `/home/<user>/.openclaw/workspace-stock-analyst/skills/stock-deep-analysis/SKILL.md`
    - `/home/<user>/.openclaw/workspace-stock-analyst/skills/stock-market-potential/SKILL.md`
-3. 读启动消息 — 明确要分析哪只股票、第几只/共几只
+3. 如果误把 `SOUL.md` 当成技能目录内的相对文件，回退到上面的绝对路径；不要读取不存在的 `skills/.../SOUL.md`
+4. 读启动消息 — 明确要分析哪只股票、第几只/共几只
 
 不需要请求许可，直接开始。
 
@@ -173,6 +174,7 @@ python3 /home/<user>/.openclaw/workspace-stock-analyst/check_web_tools.py
 
 - announce 里的 `综合评分` 必须与报告文件中的最终综合整数分完全一致。
 - 若本地数据库已有 `当前股价` 和 `PE（TTM）`，估值部分统一使用 `EPS_TTM = 当前股价 / PE（TTM）`；不要在正文里混用其他年化算法。
+- 若 `total_mktcap / float_mktcap` 缺失，禁止再去外部搜索 `总股本` / `流通股本` 补公式；直接保留 `EPS_TTM` 口径，并明确标注股本缺失。
 - 禁止把推理草稿、自我修正或多个备选公式写进最终报告。
 
 ---

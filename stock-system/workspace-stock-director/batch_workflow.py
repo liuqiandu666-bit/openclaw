@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 
 MEMORY_DIR = Path('/home/<user>/.openclaw/workspace/memory')
+DIRECTOR_MEMORY_DIR = Path(__file__).resolve().parent / 'memory'
 DB_PATH = '/home/<user>/.openclaw/workspace/data/astock.db'
 PRICE_THRESHOLD_PCT = 8.0
 PE_THRESHOLD_PCT = 15.0
@@ -113,6 +114,104 @@ def load_latest_screener(date_str=None):
     path = Path(files[-1])
     with path.open('r', encoding='utf-8') as f:
         return json.load(f), path
+
+
+def list_matching_files(patterns):
+    seen = set()
+    results = []
+    for pattern in patterns:
+        for raw in sorted(glob.glob(str(MEMORY_DIR / pattern))):
+            path = Path(raw)
+            if path in seen:
+                continue
+            seen.add(path)
+            results.append(path)
+    return results
+
+
+def build_daily_memory_note(date_str=None, output_path=None):
+    date_str = normalize_date(date_str) or dt.date.today().isoformat()
+    DIRECTOR_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    out = Path(output_path) if output_path else DIRECTOR_MEMORY_DIR / f'{date_str}.md'
+
+    today_patterns = [
+        f'screener_result_{date_str}.json',
+        f'stock-pick-{date_str}.md',
+        f'stock-pick-top*-{date_str}.md',
+        f'stock-rerank-top*-{date_str}.md',
+        f'stock-fetch-status-{date_str}.md',
+        f'stock-report-index-{date_str}.txt',
+        f'stock-report-index-{date_str}.tsv',
+        f'stock-deep-*-{date_str}.md',
+        f'qa-log-{date_str}.md',
+    ]
+    today_files = list_matching_files(today_patterns)
+
+    recent_patterns = [
+        'stock-pick-*.md',
+        'stock-pick-top*-*.md',
+        'stock-rerank-top*-*.md',
+        'stock-fetch-status-*.md',
+        'stock-report-index-*.txt',
+        'stock-report-index-*.tsv',
+        'qa-log-*.md',
+    ]
+    recent_files = list_matching_files(recent_patterns)
+    recent_files = sorted(recent_files, key=lambda path: path.stat().st_mtime, reverse=True)
+    recent_files = [path for path in recent_files if path.name not in {item.name for item in today_files}][:8]
+
+    director_today = sorted(DIRECTOR_MEMORY_DIR.glob(f'*{date_str}*'))
+    director_today = [path for path in director_today if path.name != out.name]
+
+    lines = [
+        f'# {date_str} 工作日志',
+        '',
+        f'- 生成时间：{dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+        '- 说明：这是总监工作区的自动占位日志，用来避免新的一天首轮批量任务因缺少当日日志而直接读文件失败。',
+        '',
+        '## 今日共享产物',
+    ]
+    if today_files:
+        lines.extend([f'- `{path.name}`' for path in today_files])
+    else:
+        lines.append('- 今日尚未发现共享 memory 产物。')
+
+    lines.extend([
+        '',
+        '## 最近可用共享产物',
+    ])
+    if recent_files:
+        for path in recent_files:
+            modified = dt.datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
+            lines.append(f'- `{path.name}`（更新于 {modified}）')
+    else:
+        lines.append('- 暂无历史共享产物。')
+
+    lines.extend([
+        '',
+        '## 总监工作区现状',
+    ])
+    if director_today:
+        lines.extend([f'- `{path.name}`' for path in director_today])
+    else:
+        lines.append('- 今日尚未生成总监侧补充记录。')
+
+    lines.extend([
+        '',
+        '## 启动建议',
+        '- 若今日已有 `stock-fetch-status-YYYY-MM-DD.md`，优先据此回答数据更新或空输出兜底问题。',
+        '- 若今日已有 `stock-pick-YYYY-MM-DD.md` 或 `stock-pick-topN-YYYY-MM-DD.md`，优先据此推进批量筛选/复排流程。',
+        '- 若今日仍无共享产物，把这份文件视为占位上下文即可，不要因为缺少当日日志而中断首轮任务。',
+    ])
+
+    out.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    return {
+        'date': date_str,
+        'output_path': str(out),
+        'today_files': [str(path) for path in today_files],
+        'recent_files': [str(path) for path in recent_files],
+        'director_files': [str(path) for path in director_today],
+    }
 
 
 def find_latest_report(code):
@@ -314,8 +413,15 @@ def decision_for_reuse(code, mode):
         reasons.append(f'report older than {MAX_REPORT_AGE_DAYS} days: {report_age_days}d')
 
     current_snap_date = normalize_date(now.get('market_snap_date'))
+    cached_snap_date = normalize_date(meta.get('market_snap_date'))
     snap_age_days = days_between(current_snap_date, today_obj)
-    if snap_age_days is not None and snap_age_days >= MAX_SNAPSHOT_STALE_DAYS:
+    same_day_same_snapshot = (
+        report_same_day
+        and current_snap_date
+        and cached_snap_date
+        and current_snap_date == cached_snap_date
+    )
+    if snap_age_days is not None and snap_age_days >= MAX_SNAPSHOT_STALE_DAYS and not same_day_same_snapshot:
         reasons.append(f'market snapshot stale: {current_snap_date}')
 
     cached_fin = normalize_date(meta.get('financial_report_date'))
@@ -371,12 +477,6 @@ def build_initial(top_n, date_str=None):
     data, source = load_latest_screener(date_str)
     date_str = data['date']
     top_n = max(1, min(int(top_n), 30))
-
-    # 每次新批次开始时截断索引文件，避免旧批次条目污染 build-rerank
-    for ext in ('txt', 'tsv'):
-        index_path = MEMORY_DIR / f'stock-report-index-{date_str}.{ext}'
-        if index_path.exists():
-            index_path.write_text('', encoding='utf-8')
     sorted_results = sort_screener_results(data.get('results', []))
     items = []
     for idx, item in enumerate(sorted_results[:top_n], 1):
@@ -431,6 +531,118 @@ def parse_index_line(line):
     return None
 
 
+def load_index_entries(date_str):
+    entries = {}
+    index_paths = [
+        MEMORY_DIR / f'stock-report-index-{date_str}.tsv',
+        MEMORY_DIR / f'stock-report-index-{date_str}.txt',
+    ]
+    for index_path in index_paths:
+        if not index_path.exists():
+            continue
+        for raw in index_path.read_text(encoding='utf-8').splitlines():
+            parsed = parse_index_line(raw)
+            if not parsed:
+                continue
+            code = parsed['code']
+            current = entries.get(code)
+            if current is None:
+                entries[code] = parsed
+                continue
+            current_score = sum(1 for k in ('deep_score', 'conclusion', 'highlight', 'risk') if current.get(k) not in (None, '', '-'))
+            parsed_score = sum(1 for k in ('deep_score', 'conclusion', 'highlight', 'risk') if parsed.get(k) not in (None, '', '-'))
+            current_bonus = 1 if current.get('status') not in ('legacy', None, '') else 0
+            parsed_bonus = 1 if parsed.get('status') not in ('legacy', None, '') else 0
+            if parsed_score + parsed_bonus >= current_score + current_bonus:
+                entries[code] = parsed
+    return entries
+
+
+def make_index_line(parsed, status):
+    return '\t'.join([
+        parsed['code'],
+        parsed.get('name') or parsed['code'],
+        str(parsed.get('initial_rank') or ''),
+        str(parsed.get('initial_score') or ''),
+        str(parsed.get('deep_score') or ''),
+        parsed.get('conclusion') or '',
+        parsed.get('highlight') or '',
+        parsed.get('risk') or '',
+        parsed.get('report_path') or '',
+        status,
+    ])
+
+
+def resume_batch(top_n, mode='auto', date_str=None):
+    data, _ = load_latest_screener(date_str)
+    date_str = data['date']
+    top_n = max(1, min(int(top_n), 50))
+    sorted_results = sort_screener_results(data.get('results', []))
+    target_items = []
+    for idx, item in enumerate(sorted_results[:top_n], 1):
+        target_items.append({
+            'initial_rank': idx,
+            'code': item['code'],
+            'name': item['name'],
+            'industry': item.get('industry'),
+            'initial_score': item.get('composite_score'),
+            'quant_score': item.get('quant_score'),
+            'exec_score': item.get('exec_hold_score'),
+            'metrics': item.get('metrics') or {},
+        })
+
+    indexed = load_index_entries(date_str)
+    completed = []
+    pending = []
+    recovered_index_lines = []
+
+    for item in target_items:
+        code = item['code']
+        existing = indexed.get(code)
+        if existing and existing.get('status') in ('reused', 'fresh', 'failed'):
+            merged = {**item, **existing}
+            completed.append(merged)
+            continue
+
+        decision = decision_for_reuse(code, mode)
+        decision.update({
+            'code': code,
+            'name': decision.get('name') or item['name'],
+            'initial_rank': item['initial_rank'],
+            'initial_score': item['initial_score'],
+        })
+        if decision.get('decision') == 'reuse':
+            recovered_index_lines.append(decision['index_line'])
+            completed.append({
+                **item,
+                **decision,
+                'status': 'reused',
+            })
+        else:
+            pending.append({
+                **item,
+                **decision,
+            })
+
+    next_batch = pending[:5]
+    result = {
+        'date': date_str,
+        'top_n': top_n,
+        'mode': mode,
+        'completed_count': len(completed),
+        'pending_count': len(pending),
+        'indexed_count': len(indexed),
+        'recovered_index_lines': recovered_index_lines,
+        'completed': completed,
+        'pending': pending,
+        'next_batch': next_batch,
+        'index_path': str(MEMORY_DIR / f'stock-report-index-{date_str}.txt'),
+        'rerank_path': str(MEMORY_DIR / f'stock-rerank-top{top_n}-{date_str}.md'),
+        'top_pick_path': str(MEMORY_DIR / f'stock-pick-top{top_n}-{date_str}.md'),
+    }
+    print(json.dumps(result, ensure_ascii=False))
+
+
 def build_rerank(top_n, date_str=None):
     data, _ = load_latest_screener(date_str)
     date_str = data['date']
@@ -449,40 +661,20 @@ def build_rerank(top_n, date_str=None):
             'metrics': item.get('metrics') or {},
             'targeted': idx <= top_n,
         }
-    index_paths = [
-        MEMORY_DIR / f'stock-report-index-{date_str}.tsv',
-        MEMORY_DIR / f'stock-report-index-{date_str}.txt',
-    ]
-    entries = {}
-    for index_path in index_paths:
-        if not index_path.exists():
+    entries = load_index_entries(date_str)
+    for code, parsed in list(entries.items()):
+        if code not in initial_map or not initial_map[code]['targeted']:
             continue
-        for raw in index_path.read_text(encoding='utf-8').splitlines():
-            parsed = parse_index_line(raw)
-            if not parsed:
-                continue
-            code = parsed['code']
-            if code not in initial_map or not initial_map[code]['targeted']:
-                continue
-            if parsed.get('report_path') and parsed.get('report_path') != '无报告':
-                meta, _ = load_or_build_meta(Path(parsed['report_path']))
-                parsed.update({
-                    'name': meta.get('name') or parsed.get('name') or initial_map[code]['name'],
-                    'deep_score': parsed.get('deep_score') if parsed.get('deep_score') is not None else meta.get('deep_score'),
-                    'conclusion': parsed.get('conclusion') or meta.get('conclusion') or '',
-                    'highlight': parsed.get('highlight') or meta.get('highlight') or '',
-                    'risk': parsed.get('risk') or meta.get('risk') or '',
-                })
-            current = entries.get(code)
-            if current is None:
-                entries[code] = parsed
-                continue
-            current_score = sum(1 for k in ('deep_score', 'conclusion', 'highlight', 'risk') if current.get(k) not in (None, '', '-'))
-            parsed_score = sum(1 for k in ('deep_score', 'conclusion', 'highlight', 'risk') if parsed.get(k) not in (None, '', '-'))
-            current_bonus = 1 if current.get('status') not in ('legacy', None, '') else 0
-            parsed_bonus = 1 if parsed.get('status') not in ('legacy', None, '') else 0
-            if parsed_score + parsed_bonus >= current_score + current_bonus:
-                entries[code] = parsed
+        if parsed.get('report_path') and parsed.get('report_path') != '无报告':
+            meta, _ = load_or_build_meta(Path(parsed['report_path']))
+            parsed.update({
+                'name': meta.get('name') or parsed.get('name') or initial_map[code]['name'],
+                'deep_score': parsed.get('deep_score') if parsed.get('deep_score') is not None else meta.get('deep_score'),
+                'conclusion': parsed.get('conclusion') or meta.get('conclusion') or '',
+                'highlight': parsed.get('highlight') or meta.get('highlight') or '',
+                'risk': parsed.get('risk') or meta.get('risk') or '',
+            })
+            entries[code] = parsed
     rows = []
     for item in sorted_results:
         code = item['code']
@@ -565,6 +757,15 @@ def main():
     p.add_argument('--top-n', type=int, required=True)
     p.add_argument('--date')
 
+    p = sub.add_parser('resume-batch')
+    p.add_argument('--top-n', type=int, required=True)
+    p.add_argument('--mode', choices=['auto', 'force'], default='auto')
+    p.add_argument('--date')
+
+    p = sub.add_parser('ensure-daily-memory')
+    p.add_argument('--date')
+    p.add_argument('--output')
+
     args = parser.parse_args()
     if args.cmd == 'build-initial':
         build_initial(args.top_n, args.date)
@@ -591,6 +792,10 @@ def main():
                 'reused',
             ])
         print(json.dumps(result, ensure_ascii=False))
+    elif args.cmd == 'ensure-daily-memory':
+        print(json.dumps(build_daily_memory_note(args.date, args.output), ensure_ascii=False))
+    elif args.cmd == 'resume-batch':
+        resume_batch(args.top_n, args.mode, args.date)
     else:
         build_rerank(args.top_n, args.date)
 

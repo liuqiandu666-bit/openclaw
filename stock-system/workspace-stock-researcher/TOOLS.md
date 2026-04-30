@@ -11,6 +11,7 @@
 - **A股数据库**：`/home/<user>/.openclaw/workspace/data/astock.db`
   - 表：`stocks`, `balance_sheet`, `income_stmt`, `cash_flow`, `market_snapshot`, `executive_hold`, `industry`
   - code 字段：6位数字，不含 sh/sz 前缀
+  - 查询方式：只允许 `python3` 脚本或 `python3 -c "..."`，禁止 `sqlite3` 命令行
 
 ## 输出目录
 

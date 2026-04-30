@@ -6,8 +6,10 @@
 
 1. `SOUL.md` — 确认身份和边界
 2. `USER.md` — 确认用户偏好和上下文
-3. `memory/YYYY-MM-DD.md`（今天 + 昨天）— 最近发生了什么
+3. 先确保 `memory/YYYY-MM-DD.md` 存在：若今天文件不存在，先执行 `python3 batch_workflow.py ensure-daily-memory --date YYYY-MM-DD` 生成占位日志，再读取今天；若今天仍无有效内容，再读取昨天对应文件
 4. **仅主会话**：额外读取 `MEMORY.md`
+
+不要因为 `memory/YYYY-MM-DD.md` 缺失就直接失败或反复重试同一路径。当天日志缺失时，生成占位日志后继续流程即可。
 
 如果 `BOOTSTRAP.md` 存在，按其指引完成初始化后删除它。
 
@@ -18,10 +20,10 @@
 
 ### 硬规则（优先级高于其他流程）
 
-- 只要消息里出现 `Findings:` 且内容是 `(no output)` 或 `NO_REPLY`，本轮**绝对禁止**回复 `NO_REPLY`。
-- 对这类消息，先查 `stock-fetch-status-YYYY-MM-DD.md`；文件存在就直接总结给用户。
-- 若文件不存在，再执行本地数据库验证并回复用户。
-- `NO_REPLY` 只允许用于真正无需对外回复的中间轮次；**不允许**用于数据更新、状态检查、空输出兜底。
+- 若消息里明确出现 `internal stock batch workflow event`，优先按**批量工作流内部事件**处理；这类 researcher / analyst announce 不是 `stock-fetcher` 空输出兜底，**不要**先去查 `stock-fetch-status-YYYY-MM-DD.md`。
+- 只有 `stock-fetcher / 数据更新` 类消息出现 `Findings: (no output)` 或 `Findings: NO_REPLY` 时，才进入 `stock-fetch-status-YYYY-MM-DD.md` + 本地数据库验证的兜底流程。
+- 对批量 researcher / analyst 的内部 announce，若本轮还没到最终统一交付节点，允许继续内部处理并返回 `NO_REPLY`。
+- `NO_REPLY` 只允许用于真正无需对外回复的中间轮次；**不允许**用于数据更新、状态检查、`stock-fetcher` 空输出兜底。
 
 ---
 
@@ -47,17 +49,17 @@
 
 每轮的正确行为：
 
-| 当前轮收到的消息                                              | 本轮应做的事                                                                                      | 本轮文字输出       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ |
-| 用户请求（先筛后析）                                          | spawn researcher                                                                                  | 无                 |
-| 用户请求（单只股票深度分析）                                  | spawn stock-analyst，然后立刻停止本轮                                                             | 无                 |
-| 用户请求（数据更新）                                          | spawn stock-fetcher                                                                               | 无                 |
-| researcher announce                                           | 验证 → 读 stock-pick.md → spawn 第1批5只 analyst                                                  | 无                 |
-| analyst announce（单只股票深度分析）                          | 直接生成 1-2 句标准 announce 摘要并回复用户                                                       | 发给用户的最终回复 |
-| analyst announce（非最后一条）                                | 记录摘要 → 若该批已满5条则 spawn 下一批                                                           | 无                 |
-| analyst announce（第20条，最后一条）                          | 发文件 → 发文字汇总                                                                               | 发给用户的最终回复 |
-| fetcher announce                                              | 验证数据库 → 回复用户                                                                             | 发给用户的最终回复 |
-| 任一子任务完成消息且 `Findings` 为 `(no output)` / `NO_REPLY` | 若存在最近生成的 `stock-fetch-status-YYYY-MM-DD.md`，直接读取并回复用户；否则本地验证数据库后回复 | 发给用户的最终回复 |
+| 当前轮收到的消息                                                                  | 本轮应做的事                                                                                               | 本轮文字输出       |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------ |
+| 用户请求（先筛后析）                                                              | spawn researcher                                                                                           | 无                 |
+| 用户请求（单只股票深度分析）                                                      | spawn stock-analyst，然后立刻停止本轮                                                                      | 无                 |
+| 用户请求（数据更新）                                                              | spawn stock-fetcher                                                                                        | 无                 |
+| researcher announce                                                               | 验证 → 读 stock-pick.md → spawn 第1批5只 analyst；若 `Findings` 只是内部工作流提示，也继续按已落盘产物推进 | 无                 |
+| analyst announce（单只股票深度分析）                                              | 直接生成 1-2 句标准 announce 摘要并回复用户                                                                | 发给用户的最终回复 |
+| analyst announce（非最后一条）                                                    | 记录摘要 → 若该批已满5条则 spawn 下一批                                                                    | 无                 |
+| analyst announce（第20条，最后一条）                                              | 发文件 → 发文字汇总                                                                                        | 发给用户的最终回复 |
+| fetcher announce                                                                  | 验证数据库 → 回复用户                                                                                      | 发给用户的最终回复 |
+| stock-fetcher / 数据更新子任务完成消息且 `Findings` 为 `(no output)` / `NO_REPLY` | 若存在最近生成的 `stock-fetch-status-YYYY-MM-DD.md`，直接读取并回复用户；否则本地验证数据库后回复          | 发给用户的最终回复 |
 
 **⚠️ 文字输出只允许在"最后一条 announce"轮次产生。** 唯一例外是“单只股票深度分析”的 analyst announce：该场景收到 announce 后应立即给用户最终摘要，不再等待其他轮次。
 在此之前产生文字（包括"稍等"、"已下发任务"、"正在处理"）会让用户误认为任务已完成，且无法撤回。
@@ -76,6 +78,29 @@
    - 若不确定 `requested_n`，用：`批量调研仍在处理中，完成后我会把所有文件一起发给你。`
 6. 若用户催问里包含”已经有哪些完成了” / “完成了几只”，可基于上下文记忆（不借助工具）最多补 1 句已知进度，格式：`目前已完成 {N} 只，其余仍在处理中。`；若上下文无法确认，省略该句。
 7. 除上述固定进度提示外，本轮直接保持沉默（不输出 `NO_REPLY`，不调用任何工具）等待下一条 announce。
+
+### 批量任务中断后的恢复处理
+
+若满足下面任一条件，不再按“普通催问”处理，而是进入**恢复模式**：
+
+1. 用户重复发送同类“先筛后析 / 前N名调研”请求，且距离上次只收到进度提示已经过去较久（通常 >= 10 分钟）。
+2. 当天已存在 `stock-pick-top{N}-YYYY-MM-DD.md`，但不存在对应 `stock-rerank-top{N}-YYYY-MM-DD.md`。
+3. 当天 `stock-report-index-YYYY-MM-DD.txt` 存在但为空，或条目数明显少于 `requested_n`。
+4. 你从上下文已知网关/进程刚重启过，原批次很可能被中断。
+
+恢复模式允许做一次最小必要恢复，统一只用这个脚本入口：
+
+```bash
+python3 /home/<user>/.openclaw/workspace-stock-director/batch_workflow.py resume-batch --top-n {requested_n} --mode {refresh_mode}
+```
+
+恢复模式规则：
+
+- 若 `recovered_index_lines` 非空，把这些行追加到 `stock-report-index-YYYY-MM-DD.txt`；**禁止**手动创建空索引文件。
+- 若 `completed_count == requested_n`，直接进入 `build-rerank` + 发文件 + 最终汇总。
+- 若 `next_batch` 非空，只对 `next_batch` 继续 `sessions_spawn(stock-analyst)`，不要重跑 researcher。
+- 若本轮必须给用户反馈，只允许 1 句恢复型进度提示：
+  - `刚才那批任务中途被打断了，我已经从已有结果继续恢复，剩余前{requested_n}名会接着跑完。`
 
 ### 单只股票深度分析快速收口
 
@@ -167,6 +192,7 @@ python3 /home/<user>/.openclaw/workspace-stock-director/batch_workflow.py reuse-
 - 且 PE(TTM) 变化 < 15%
 - 且旧报告距今不超过 5 天
 - 且最新行情快照距今不足 2 天；若行情快照已是 2 天前或更旧，则视为需要刷新，避免长期复用旧评分
+- 例外：**若报告就是今天生成，且报告内记录的行情快照日期与当前数据库最新快照日期一致**，则允许继续复用；不要因为“全市场快照整体偏旧”而在同一天对同一只股票重复重跑
   则可复用；否则补做深析。
 
 当 `decision=reuse` 时：
@@ -182,6 +208,8 @@ python3 /home/<user>/.openclaw/workspace-stock-director/batch_workflow.py reuse-
 3. 收到标准 announce 后，按下面 TSV 格式追加到 `stock-report-index-YYYY-MM-DD.txt`：
    `{代码}	{名称}	{初筛排名}	{初筛综合分}	{深析综合分}	{入场结论}	{核心亮点}	{主要风险}	{报告路径}	fresh`
 4. 一旦当前批次已经全部 spawn 完成，本轮立即结束，等待 analyst announce；不要再额外检查“子任务是否真的在跑”。
+
+若后续因网关重启、会话中断或长时间无 announce 导致批次脱节，使用 `resume-batch` 重新计算“已完成 / 待继续”状态，而不是重新从 researcher 开始。
 
 根据 `stock-report-index-YYYY-MM-DD.txt` 行数决定下一步：
 

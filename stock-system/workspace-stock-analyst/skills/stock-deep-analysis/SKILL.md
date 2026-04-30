@@ -58,6 +58,7 @@ python3 -c "from datetime import date; print(date.today())"
 ⚠️ **严禁使用 `sqlite3` 命令行**，只允许 `python3 -c "..."` 或 `python3 script.py`。
 ⚠️ **严禁查询不存在的 `total_shares` 列**。`market_snapshot` 只有 `total_mktcap / float_mktcap`，且这两个值可能为 `NULL`。
 ⚠️ **当 `total_mktcap` / `float_mktcap` 为 `NULL` 时，禁止做 `None / price` 之类推导股本的运算**；此时统一使用 `EPS_TTM = 当前股价 / PE（TTM）` 口径，并在报告中写明 `⚠️ 股本数据缺失，未单独推导总股本`。
+⚠️ **出现上述缺口时，禁止再用 `web_search`、财经站页面、公告摘要或常识去补 `总股本` / `流通股本`**；估值部分只能保留 `EPS_TTM` 口径，不能混入外部股本数字。
 
 ```python
 import sqlite3
@@ -156,6 +157,7 @@ web_search: "{行业名称} 政策 2025 OR 2026"
 
 - 若本地数据库同时给出 `当前股价` 和 `PE（TTM）`，则一律使用 `EPS_TTM = 当前股价 / PE（TTM）` 作为基准年化 EPS。
 - 一旦采用 `EPS_TTM` 口径，报告内所有 `合理买入价`、`1/3/5年目标价`、`年化收益率` 都必须基于同一口径，禁止再切换到 `Q3单季×4`、`前三季度×4/3` 等其他算法。
+- 若 `total_mktcap / float_mktcap` 缺失，也**不得**额外搜索或猜测股本来改写公式；直接把 `合理买入价`、`目标价` 改写成 `EPS × PE` 形式即可。
 - 最终报告中不得出现草稿、自我纠错、问句或平行版本，只保留一套最终数字和一套最终解释。
 
 **触发条件**：
